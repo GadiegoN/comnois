@@ -16,6 +16,7 @@ export interface SystemHealthReport {
   database: {
     connected: boolean;
     latencyMs: number;
+    totalItemsCount?: number;
   };
   queue: {
     pendingCount: number;
@@ -43,7 +44,9 @@ export async function getSystemHealthAndBackupIntegrity(
   const startDb = performance.now();
   const db = await getDb();
 
-  await db.select({ count: sql<number>`count(*)` }).from(items);
+  const allItems = await db
+    .select({ id: items.id, ownerId: items.ownerId, title: items.title, createdAt: items.createdAt })
+    .from(items);
   const dbLatencyMs = Number((performance.now() - startDb).toFixed(2));
 
   const queue = await getQueueMetrics(ownerId);
@@ -85,6 +88,7 @@ export async function getSystemHealthAndBackupIntegrity(
     database: {
       connected: true,
       latencyMs: dbLatencyMs,
+      totalItemsCount: allItems.length,
     },
     queue: {
       pendingCount: queue.counts.pending + queue.counts.retrying,

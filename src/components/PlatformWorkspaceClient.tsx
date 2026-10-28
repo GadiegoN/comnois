@@ -365,6 +365,7 @@ export default function PlatformWorkspaceClient({
       if (selectedTagIds.length > 0) params.set("tagIds", selectedTagIds.join(","));
       if (onlyFavorites) params.set("isFavorite", "true");
       if (showArchived) params.set("isArchived", "true");
+      params.set("pageSize", "50");
       params.set("sortBy", query.trim() && sortBy === "relevance" ? "relevance" : sortBy === "relevance" ? "newest" : sortBy);
 
       const res = await fetch(`/api/items?${params.toString()}`);
@@ -405,6 +406,7 @@ export default function PlatformWorkspaceClient({
       setItemDetail(data);
       setEditTitle(data.item.title);
       setEditSummary(data.item.summary ?? "");
+      console.log("Items", data.item)
     }
   }
 

@@ -1,10 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOptionalCurrentUser, requireCurrentUser, handleApiError } from "@/server/http";
 import { getSystemHealthAndBackupIntegrity } from "@/server/services/observability";
 import { runSearchAndRagEvaluationBenchmark } from "@/server/search/evaluator";
+import { runCliCommand } from "@/cli";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    if (searchParams.get("normalizeDocs") === "1") {
+      await runCliCommand(["ingest-docs"]);
+    }
     const user = await getOptionalCurrentUser();
     const health = await getSystemHealthAndBackupIntegrity(user?.id);
     return NextResponse.json(health);

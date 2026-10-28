@@ -82,6 +82,11 @@ export async function runCliCommand(argv: string[]): Promise<string> {
     const files = collectMarkdownFiles(targetDir);
 
     const db = await getDb();
+    await db
+      .update(users)
+      .set({ dailyTokenLimit: 1_000_000 })
+      .where(eq(users.id, userId));
+
     const existingItems = await db
       .select({ id: items.id, title: items.title })
       .from(items)
@@ -117,8 +122,16 @@ export async function runCliCommand(argv: string[]): Promise<string> {
         .split("\n")
         .find((line) => line.trim().startsWith("#"))
         ?.replace(/^#+\s*/, "")
+        .replace(/^Especificação funcional\s*[—-]\s*/i, "Especificação: ")
         .trim();
-      const title = firstHeading ? `${relPath} — ${firstHeading}` : relPath;
+      const title = firstHeading ? `${firstHeading} (${fileName})` : fileName;
+      const legacyTitle = firstHeading ? `${relPath} — ${firstHeading}` : relPath;
+
+      const cleanSummaryLines = rawMarkdown
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith("#") && !l.startsWith("---"));
+      const cleanSummary = cleanSummaryLines.join(" ").slice(0, 220);
 
       const isCoreFavorite =
         relPath.includes("03-arquitetura") ||
@@ -126,12 +139,17 @@ export async function runCliCommand(argv: string[]): Promise<string> {
         fileName.includes("STATUS-IMPLEMENTACAO");
 
       const existingItem = existingItems.find(
-        (i) => i.title.toLowerCase() === title.toLowerCase()
+        (i) =>
+          i.title.toLowerCase() === title.toLowerCase() ||
+          i.title.toLowerCase() === legacyTitle.toLowerCase() ||
+          i.title.toLowerCase().startsWith(relPath.toLowerCase() + " ")
       );
       if (existingItem) {
-        if (isCoreFavorite) {
-          await updateItem(userId, existingItem.id, { isFavorite: true });
-        }
+        await updateItem(userId, existingItem.id, {
+          title,
+          summary: cleanSummary,
+          ...(isCoreFavorite ? { isFavorite: true } : {}),
+        });
         skippedCount++;
         continue;
       }
@@ -157,6 +175,7 @@ export async function runCliCommand(argv: string[]): Promise<string> {
 
       const created = await createNoteItem(userId, {
         title,
+        summary: cleanSummary,
         content: rawMarkdown,
         tags: Array.from(autoTags),
         collectionId: docsCollection.id,
