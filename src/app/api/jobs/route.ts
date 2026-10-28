@@ -6,6 +6,7 @@ import {
   recoverStaleJobs,
 } from "@/server/jobs/queue";
 import { reindexUserLibrary } from "@/server/search";
+import { runCliCommand } from "@/cli";
 
 export async function GET() {
   try {
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireCurrentUser();
     const body = await req.json().catch(() => ({}));
+
+    if (body.action === "ingestDocs") {
+      const output = await runCliCommand(["ingest-docs", "docs", user.id]);
+      return NextResponse.json(JSON.parse(output));
+    }
 
     if (body.action === "reindex") {
       const reindexed = await reindexUserLibrary(user.id, {

@@ -58,7 +58,8 @@ export async function runCliCommand(argv: string[]): Promise<string> {
     ].join("\n");
   }
 
-  const userId = await resolveDefaultCliUserId();
+  const defaultUserId = await resolveDefaultCliUserId();
+  const userId = command === "ingest-docs" && rest[1] ? rest[1] : defaultUserId;
 
   if (command === "ingest-docs") {
     const targetDir = path.resolve(process.cwd(), rest[0] || "docs");

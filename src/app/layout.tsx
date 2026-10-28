@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Comnois — Plataforma Inteligente de Conhecimento",
+  title: "Comnois — Plataforma Inteligente de Conhecimento & RAG Verificável",
   description:
-    "Biblioteca pessoal e colaborativa com captura assíncrona, pesquisa híbrida e assistente de IA com citações verificáveis.",
+    "Biblioteca pessoal e colaborativa com captura assíncrona, pesquisa híbrida RRF, multi-tema e assistente de IA com citações verificáveis.",
 };
 
 export default function RootLayout({
@@ -13,11 +14,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
-      <body className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
-        {children}
+    <html lang="pt-BR" data-theme="light" suppressHydrationWarning>
+      <body className="min-h-screen bg-canvas text-fg antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
 }
-

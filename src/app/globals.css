@@ -1,12 +1,192 @@
 @import "tailwindcss";
 
-:root {
+/* ============================================================================
+   COMNOIS DESIGN SYSTEM — TOKENS MULTI-TEMA (LIGHT, SÉPIA, OBSIDIAN, AURORA)
+   ============================================================================ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-inset: #f8fafc;
+  --bg-glass: rgba(255, 255, 255, 0.86);
+
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+
+  --brand-primary: #4f46e5;
+  --brand-hover: #4338ca;
+  --brand-soft: rgba(79, 70, 229, 0.1);
+  --brand-border: rgba(79, 70, 229, 0.28);
+  --brand-text: #4338ca;
+
+  --status-success-bg: rgba(16, 185, 129, 0.12);
+  --status-success-border: rgba(16, 185, 129, 0.35);
+  --status-success-text: #047857;
+
+  --status-warning-bg: rgba(245, 158, 11, 0.14);
+  --status-warning-border: rgba(245, 158, 11, 0.38);
+  --status-warning-text: #b45309;
+
+  --status-danger-bg: rgba(239, 68, 68, 0.1);
+  --status-danger-border: rgba(239, 68, 68, 0.32);
+  --status-danger-text: #b91c1c;
+
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-elevated: 0 12px 32px -4px rgba(15, 23, 42, 0.1);
+}
+
+[data-theme="sepia"] {
+  color-scheme: light;
+  --bg-canvas: #faf5ec;
+  --bg-surface: #fffdf9;
+  --bg-elevated: #f3eadb;
+  --bg-inset: #f6efe2;
+  --bg-glass: rgba(255, 253, 249, 0.88);
+
+  --border-subtle: #e4d8c4;
+  --border-strong: #d1bfa3;
+
+  --text-primary: #261e18;
+  --text-secondary: #4a3c31;
+  --text-muted: #7a6858;
+
+  --brand-primary: #b45309;
+  --brand-hover: #92400e;
+  --brand-soft: rgba(180, 83, 9, 0.12);
+  --brand-border: rgba(180, 83, 9, 0.3);
+  --brand-text: #92400e;
+
+  --status-success-bg: rgba(21, 128, 61, 0.12);
+  --status-success-border: rgba(21, 128, 61, 0.32);
+  --status-success-text: #166534;
+
+  --status-warning-bg: rgba(217, 119, 6, 0.15);
+  --status-warning-border: rgba(217, 119, 6, 0.38);
+  --status-warning-text: #92400e;
+
+  --status-danger-bg: rgba(185, 28, 28, 0.12);
+  --status-danger-border: rgba(185, 28, 28, 0.32);
+  --status-danger-text: #991b1b;
+
+  --shadow-card: 0 1px 3px rgba(38, 30, 24, 0.07);
+  --shadow-elevated: 0 12px 32px -4px rgba(38, 30, 24, 0.12);
+}
+
+[data-theme="dark"] {
   color-scheme: dark;
+  --bg-canvas: #090d16;
+  --bg-surface: #111827;
+  --bg-elevated: #1e293b;
+  --bg-inset: #0b111e;
+  --bg-glass: rgba(17, 24, 39, 0.85);
+
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  --brand-primary: #6366f1;
+  --brand-hover: #4f46e5;
+  --brand-soft: rgba(99, 102, 241, 0.16);
+  --brand-border: rgba(99, 102, 241, 0.38);
+  --brand-text: #a5b4fc;
+
+  --status-success-bg: rgba(16, 185, 129, 0.15);
+  --status-success-border: rgba(16, 185, 129, 0.4);
+  --status-success-text: #6ee7b7;
+
+  --status-warning-bg: rgba(245, 158, 11, 0.15);
+  --status-warning-border: rgba(245, 158, 11, 0.4);
+  --status-warning-text: #fcd34d;
+
+  --status-danger-bg: rgba(239, 68, 68, 0.15);
+  --status-danger-border: rgba(239, 68, 68, 0.4);
+  --status-danger-text: #fca5a5;
+
+  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-elevated: 0 16px 40px -6px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="nord"] {
+  color-scheme: dark;
+  --bg-canvas: #071318;
+  --bg-surface: #0d1f27;
+  --bg-elevated: #152e3a;
+  --bg-inset: #09171d;
+  --bg-glass: rgba(13, 31, 39, 0.86);
+
+  --border-subtle: #193846;
+  --border-strong: #255063;
+
+  --text-primary: #ecfeff;
+  --text-secondary: #bae6fd;
+  --text-muted: #7dd3fc;
+
+  --brand-primary: #0d9488;
+  --brand-hover: #0f766e;
+  --brand-soft: rgba(20, 184, 166, 0.16);
+  --brand-border: rgba(20, 184, 166, 0.4);
+  --brand-text: #5eead4;
+
+  --status-success-bg: rgba(16, 185, 129, 0.16);
+  --status-success-border: rgba(16, 185, 129, 0.4);
+  --status-success-text: #6ee7b7;
+
+  --status-warning-bg: rgba(245, 158, 11, 0.16);
+  --status-warning-border: rgba(245, 158, 11, 0.4);
+  --status-warning-text: #fde68a;
+
+  --status-danger-bg: rgba(244, 63, 94, 0.16);
+  --status-danger-border: rgba(244, 63, 94, 0.4);
+  --status-danger-text: #fda4af;
+
+  --shadow-card: 0 2px 8px rgba(3, 10, 14, 0.45);
+  --shadow-elevated: 0 16px 40px -6px rgba(3, 10, 14, 0.7);
+}
+
+@theme {
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-inset: var(--bg-inset);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-brand: var(--brand-primary);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-text: var(--brand-text);
 }
 
 body {
-  background-color: #090d16;
-  color: #f1f5f9;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Suavização de barras de rolagem adaptáveis ao tema */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-canvas);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+}
