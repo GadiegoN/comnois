@@ -735,3 +735,297 @@ export async function searchLibrary(filters: SearchFilters): Promise<SearchRespo
   };
 }
 
+export interface RelatedItemConnection {
+  id: string;
+  type: "link" | "note" | "file" | "image";
+  title: string;
+  originalUrl: string | null;
+  domain: string | null;
+  similarityScore: number;
+  sharedTags: string[];
+  connectionReason: string;
+}
+
+export async function findRelatedItems(input: {
+  ownerId: string;
+  itemId: string;
+  limit?: number;
+}): Promise<RelatedItemConnection[]> {
+  const db = await getDb();
+  const limit = Math.min(10, Math.max(1, input.limit ?? 5));
+
+  const [sourceItem] = await db
+    .select()
+    .from(items)
+    .where(eq(items.id, input.itemId))
+    .limit(1);
+
+  if (!sourceItem || sourceItem.ownerId !== input.ownerId) {
+    return [];
+  }
+
+  const allUserItems = await db
+    .select()
+    .from(items)
+    .where(eq(items.ownerId, input.ownerId));
+
+  const candidateItems = allUserItems.filter(
+    (i) => i.id !== input.itemId && !i.isArchived
+  );
+
+  if (candidateItems.length === 0) {
+    return [];
+  }
+
+  const allItemIds = [input.itemId, ...candidateItems.map((i) => i.id)];
+
+  const tagRows = await db
+    .select({
+      itemId: itemTags.itemId,
+      tagName: tags.name,
+    })
+    .from(itemTags)
+    .innerJoin(tags, eq(itemTags.tagId, tags.id))
+    .where(inArray(itemTags.itemId, allItemIds));
+
+  const tagsByItem = new Map<string, string[]>();
+  for (const r of tagRows) {
+    const arr = tagsByItem.get(r.itemId) ?? [];
+    arr.push(r.tagName);
+    tagsByItem.set(r.itemId, arr);
+  }
+
+  const sourceTags = new Set(
+    (tagsByItem.get(input.itemId) ?? []).map((t) => t.toLowerCase())
+  );
+
+  const embRows = await db
+    .select()
+    .from(embeddings)
+    .where(inArray(embeddings.itemId, allItemIds));
+
+  const sourceEmbeddings = embRows
+    .filter((e) => e.itemId === input.itemId)
+    .map((e) => e.vectorJson);
+
+  const embByItem = new Map<string, number[][]>();
+  for (const e of embRows) {
+    if (e.itemId === input.itemId) continue;
+    const arr = embByItem.get(e.itemId) ?? [];
+    arr.push(e.vectorJson);
+    embByItem.set(e.itemId, arr);
+  }
+
+  const sourceWords = new Set(
+    normalizeSearchText(`${sourceItem.title} ${sourceItem.summary ?? ""}`)
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 4)
+  );
+
+  const scored: RelatedItemConnection[] = [];
+
+  for (const cand of candidateItems) {
+    const candTags = tagsByItem.get(cand.id) ?? [];
+    const sharedTags = candTags.filter((t) => sourceTags.has(t.toLowerCase()));
+
+    let maxSemantic = 0;
+    const candVectors = embByItem.get(cand.id) ?? [];
+    if (sourceEmbeddings.length > 0 && candVectors.length > 0) {
+      for (const sv of sourceEmbeddings) {
+        for (const cv of candVectors) {
+          if (sv.length === cv.length) {
+            const sim = cosineSimilarity(sv, cv);
+            if (sim > maxSemantic) {
+              maxSemantic = sim;
+            }
+          }
+        }
+      }
+    }
+
+    const candWords = normalizeSearchText(`${cand.title} ${cand.summary ?? ""}`)
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 4);
+    const sharedWordCount = candWords.filter((w) => sourceWords.has(w)).length;
+    const lexicalOverlap =
+      sourceWords.size > 0
+        ? Math.min(1, sharedWordCount / Math.max(3, sourceWords.size))
+        : 0;
+
+    const sameDomain =
+      Boolean(sourceItem.domain) &&
+      sourceItem.domain === cand.domain &&
+      sourceItem.type === "link";
+
+    const combinedScore = Number(
+      Math.min(
+        0.99,
+        maxSemantic * 0.65 +
+          Math.min(0.3, sharedTags.length * 0.12) +
+          lexicalOverlap * 0.2 +
+          (sameDomain ? 0.08 : 0)
+      ).toFixed(4)
+    );
+
+    if (combinedScore < 0.12 && sharedTags.length === 0) {
+      continue;
+    }
+
+    const reasons: string[] = [];
+    if (maxSemantic >= 0.25) {
+      reasons.push(`proximidade semântica (${Math.round(maxSemantic * 100)}%)`);
+    }
+    if (sharedTags.length > 0) {
+      reasons.push(
+        `etiquetas em comum (${sharedTags.map((t) => `#${t}`).join(", ")})`
+      );
+    }
+    if (sameDomain) {
+      reasons.push(`mesmo domínio (${cand.domain})`);
+    }
+    if (reasons.length === 0) {
+      reasons.push("vocabulário temático compatível");
+    }
+
+    scored.push({
+      id: cand.id,
+      type: cand.type,
+      title: cand.title,
+      originalUrl: cand.originalUrl,
+      domain: cand.domain,
+      similarityScore: combinedScore,
+      sharedTags,
+      connectionReason: reasons.join(" + "),
+    });
+  }
+
+  scored.sort((a, b) => b.similarityScore - a.similarityScore);
+  return scored.slice(0, limit);
+}
+
+export interface EmbeddingIndexDiagnostics {
+  totalActiveItems: number;
+  totalChunks: number;
+  embeddedChunksCount: number;
+  missingEmbeddingsCount: number;
+  coveragePercent: number;
+  configuredProvider: string;
+  configuredModel: string;
+  configuredDimensions: number;
+  indexedModels: Array<{
+    provider: string;
+    modelVersion: string;
+    dimensions: number;
+    chunkCount: number;
+  }>;
+  hasModelDrift: boolean;
+  hasDimensionMismatch: boolean;
+  estimatedTokensToReembed: number;
+  estimatedReindexDurationMs: number;
+  recommendation: string;
+}
+
+export async function getEmbeddingIndexDiagnostics(
+  ownerId: string
+): Promise<EmbeddingIndexDiagnostics> {
+  const db = await getDb();
+  const provider = await resolveAiProviderForUser(ownerId);
+  const caps = provider.getCapabilities();
+
+  const userItems = await db
+    .select({ id: items.id, isArchived: items.isArchived })
+    .from(items)
+    .where(eq(items.ownerId, ownerId));
+  const activeItems = userItems.filter((i) => !i.isArchived);
+
+  const chunks = await db
+    .select({
+      id: documentChunks.id,
+      text: documentChunks.text,
+    })
+    .from(documentChunks)
+    .where(eq(documentChunks.ownerId, ownerId));
+
+  const embRows = await db
+    .select({
+      chunkId: embeddings.chunkId,
+      provider: embeddings.provider,
+      modelVersion: embeddings.modelVersion,
+      dimensions: embeddings.dimensions,
+    })
+    .from(embeddings)
+    .where(eq(embeddings.ownerId, ownerId));
+
+  const modelStatsMap = new Map<
+    string,
+    { provider: string; modelVersion: string; dimensions: number; chunkCount: number }
+  >();
+  const embeddedChunkIds = new Set<string>();
+
+  for (const row of embRows) {
+    embeddedChunkIds.add(row.chunkId);
+    const key = `${row.provider}::${row.modelVersion}::${row.dimensions}`;
+    const existing = modelStatsMap.get(key);
+    if (existing) {
+      existing.chunkCount += 1;
+    } else {
+      modelStatsMap.set(key, {
+        provider: row.provider,
+        modelVersion: row.modelVersion,
+        dimensions: row.dimensions,
+        chunkCount: 1,
+      });
+    }
+  }
+
+  const indexedModels = [...modelStatsMap.values()];
+  const totalChunks = chunks.length;
+  const embeddedChunksCount = embeddedChunkIds.size;
+  const missingEmbeddingsCount = Math.max(0, totalChunks - embeddedChunksCount);
+  const coveragePercent =
+    totalChunks === 0
+      ? 100
+      : Number(((embeddedChunksCount / totalChunks) * 100).toFixed(1));
+
+  const hasModelDrift = indexedModels.some(
+    (m) => !m.modelVersion.includes(caps.modelVersion) && m.modelVersion !== caps.modelVersion
+  );
+  const hasDimensionMismatch = indexedModels.some(
+    (m) => m.dimensions !== caps.embeddingDimensions
+  );
+
+  const totalChars = chunks.reduce((acc, c) => acc + c.text.length, 0);
+  const estimatedTokensToReembed = Math.ceil(totalChars / 4);
+  const estimatedReindexDurationMs = Math.max(50, chunks.length * 15);
+
+  let recommendation =
+    "Índice vetorial íntegro e sincronizado com o modelo configurado.";
+  if (hasDimensionMismatch) {
+    recommendation =
+      "Atenção: foram detectados vetores com dimensões incompatíveis com a configuração atual. Execute a Reindexação Semântica antes de usar busca vetorial estrita.";
+  } else if (hasModelDrift) {
+    recommendation =
+      "Existem vetores gerados por uma versão anterior do modelo de embeddings. Recomenda-se reindexar a biblioteca para uniformizar o ranking semântico.";
+  } else if (missingEmbeddingsCount > 0) {
+    recommendation = `Existem ${missingEmbeddingsCount} trecho(s) sem vetores semânticos. Reindexe a biblioteca para atingir 100% de cobertura.`;
+  }
+
+  return {
+    totalActiveItems: activeItems.length,
+    totalChunks,
+    embeddedChunksCount,
+    missingEmbeddingsCount,
+    coveragePercent,
+    configuredProvider: caps.provider,
+    configuredModel: caps.modelVersion,
+    configuredDimensions: caps.embeddingDimensions,
+    indexedModels,
+    hasModelDrift,
+    hasDimensionMismatch,
+    estimatedTokensToReembed,
+    estimatedReindexDurationMs,
+    recommendation,
+  };
+}
+
+

@@ -17,7 +17,11 @@ import { normalizeUrlForDeduplication } from "@/lib/security/url-normalizer";
 import { sanitizeHtmlContent } from "@/lib/security/sanitize";
 import { detectAndValidateFileType, getStorageProvider } from "@/server/storage";
 import { enqueueJob } from "@/server/jobs/queue";
-import { indexItemContent, removeItemFromSearchIndex } from "@/server/search";
+import {
+  findRelatedItems,
+  indexItemContent,
+  removeItemFromSearchIndex,
+} from "@/server/search";
 import { normalizeSearchText } from "@/server/search/chunker";
 import { requireWorkspaceRole } from "./workspaces";
 import { dispatchWebhookEvent } from "./webhooks";
@@ -500,6 +504,12 @@ export async function getItemDetail(userId: string, itemId: string) {
     .where(eq(processingJobs.itemId, itemId))
     .orderBy(desc(processingJobs.createdAt));
 
+  const relatedItems = await findRelatedItems({
+    ownerId: item.ownerId,
+    itemId: item.id,
+    limit: 5,
+  });
+
   return {
     item,
     content: content ?? null,
@@ -516,6 +526,7 @@ export async function getItemDetail(userId: string, itemId: string) {
     collections: assignedCollections,
     highlights: itemHighlights,
     jobs,
+    relatedItems,
   };
 }
 
@@ -760,3 +771,126 @@ export async function executeBatchItemAction(input: {
 
   return { processedIds, failedItems };
 }
+
+export async function exportSingleItemAsMarkdown(
+  userId: string,
+  itemId: string
+): Promise<{ fileName: string; markdown: string; sha256Hash: string }> {
+  const detail = await getItemDetail(userId, itemId);
+  const { item, content, tags: itemTagsList, collections: colList, highlights: hlList } = detail;
+
+  const bodyText =
+    content?.noteText ||
+    content?.extractedText ||
+    item.summary ||
+    "(Sem conteúdo textual extraído)";
+
+  const snapshotHash = sha256Hex(`${item.id}:${item.contentVersion}:${bodyText}`);
+  const safeSlug = item.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || item.id;
+
+  const lines: string[] = [
+    "---",
+    `id: "${item.id}"`,
+    `title: ${JSON.stringify(item.title)}`,
+    `type: "${item.type}"`,
+    ...(item.originalUrl ? [`url: ${JSON.stringify(item.originalUrl)}`] : []),
+    ...(item.domain ? [`domain: ${JSON.stringify(item.domain)}`] : []),
+    `content_version: ${item.contentVersion}`,
+    `sha256_integrity: "${snapshotHash}"`,
+    `tags: [${itemTagsList.map((t) => JSON.stringify(t.name)).join(", ")}]`,
+    `collections: [${colList.map((c) => JSON.stringify(c.name)).join(", ")}]`,
+    `created_at: "${item.createdAt.toISOString()}"`,
+    `snapshot_generated_at: "${new Date().toISOString()}"`,
+    "---",
+    "",
+    `# ${item.title}`,
+    "",
+  ];
+
+  if (item.originalUrl) {
+    lines.push(`> **Fonte Original:** ${item.originalUrl}`);
+    lines.push("");
+  }
+
+  if (item.summary) {
+    lines.push("## Resumo");
+    lines.push("");
+    lines.push(item.summary);
+    lines.push("");
+  }
+
+  if (hlList.length > 0) {
+    lines.push("## Destaques e Anotações");
+    lines.push("");
+    for (const hl of hlList) {
+      lines.push(`- "${hl.quote}"${hl.note ? ` — *Nota: ${hl.note}*` : ""}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## Conteúdo Preservado");
+  lines.push("");
+  lines.push(bodyText);
+  lines.push("");
+
+  const markdown = lines.join("\n");
+  return {
+    fileName: `snapshot-${safeSlug}-v${item.contentVersion}.md`,
+    markdown,
+    sha256Hash: sha256Hex(markdown),
+  };
+}
+
+export async function createOfflineSnapshotForItem(
+  userId: string,
+  itemId: string
+) {
+  const item = await assertItemAccess(userId, itemId);
+  const { fileName, markdown } = await exportSingleItemAsMarkdown(
+    userId,
+    itemId
+  );
+
+  const storage = getStorageProvider();
+  const buffer = Buffer.from(markdown, "utf8");
+  const stored = await storage.putObject({
+    ownerId: item.ownerId,
+    originalFileName: fileName,
+    declaredMimeType: "text/markdown",
+    buffer,
+  });
+
+  const db = await getDb();
+  const assetId = generateId("ast");
+  const now = new Date();
+
+  await db.insert(assets).values({
+    id: assetId,
+    itemId: item.id,
+    ownerId: item.ownerId,
+    storageKey: stored.storageKey,
+    storageDriver: stored.storageDriver,
+    originalFileName: stored.originalFileName,
+    mimeType: stored.mimeType,
+    sizeBytes: stored.sizeBytes,
+    sha256Hash: stored.sha256Hash,
+    verificationStatus: "verified",
+    createdAt: now,
+  });
+
+  return {
+    id: assetId,
+    itemId: item.id,
+    originalFileName: stored.originalFileName,
+    mimeType: stored.mimeType,
+    sizeBytes: stored.sizeBytes,
+    sha256Hash: stored.sha256Hash,
+    createdAt: now,
+    downloadUrl: `/api/assets/${assetId}`,
+  };
+}
+

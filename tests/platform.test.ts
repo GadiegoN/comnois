@@ -25,6 +25,8 @@ import {
   createLinkItem,
   createNoteItem,
   createUploadedFileItem,
+  createOfflineSnapshotForItem,
+  exportSingleItemAsMarkdown,
   getItemDetail,
   updateItem,
   deleteItem,
@@ -43,7 +45,12 @@ import {
   createHighlight,
   createAutomationRule,
 } from "@/server/services/organization";
-import { searchLibrary, reindexUserLibrary } from "@/server/search";
+import {
+  searchLibrary,
+  reindexUserLibrary,
+  findRelatedItems,
+  getEmbeddingIndexDiagnostics,
+} from "@/server/search";
 import { runSearchAndRagEvaluationBenchmark } from "@/server/search/evaluator";
 import {
   createWebhook,
@@ -59,7 +66,13 @@ import {
   recoverStaleJobs,
   getQueueMetrics,
 } from "@/server/jobs/queue";
-import { askKnowledgeAssistant } from "@/server/ai/assistant";
+import {
+  askKnowledgeAssistant,
+  listAssistantConversations,
+  getAssistantConversationMessages,
+  purgeAssistantHistory,
+} from "@/server/ai/assistant";
+import { handleMcpJsonRpcRequest } from "@/server/mcp";
 import {
   updateUserAiConfig,
   getUserAiConfig,
@@ -1179,5 +1192,138 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
       .where(eq(items.ownerId, user.id));
     expect(remainingItems).toHaveLength(0);
   });
+
+  // ==========================================================================
+  // 16. HISTÓRICO RAG COM RETENÇÃO, CONEXÕES SEMÂNTICAS, SNAPSHOT OFFLINE,
+  //     DIAGNÓSTICO DE EMBEDDINGS E SERVIDOR MCP (JSON-RPC 2.0)
+  // ==========================================================================
+  it("persiste e expurga histórico RAG com isolamento, descobre conexões semânticas, gera snapshots offline (.md), diagnostica embeddings e responde via protocolo MCP", async () => {
+    const { user: alice } = await registerUser({
+      email: "alice-v14@example.com",
+      displayName: "Alice Knowledge",
+      password: "Password123",
+    });
+    const { user: bob } = await registerUser({
+      email: "bob-v14@example.com",
+      displayName: "Bob Isolated",
+      password: "Password123",
+    });
+
+    const noteA = await createNoteItem(alice.id, {
+      title: "Arquitetura de Busca Híbrida PostgreSQL e pgvector",
+      content:
+        "A busca híbrida combina ranking lexical full-text com vetores densos via Reciprocal Rank Fusion (RRF k=60) no PostgreSQL.",
+      tags: ["arquitetura", "rag", "postgres"],
+    });
+
+    const noteB = await createNoteItem(alice.id, {
+      title: "Pipeline de Embeddings e Indexação Semântica para RAG",
+      content:
+        "Os chunks do documento recebem embeddings vetoriais no PostgreSQL para sustentar recuperação híbrida RRF e citações verificáveis.",
+      tags: ["arquitetura", "rag"],
+    });
+
+    await createNoteItem(bob.id, {
+      title: "Documento Secreto do Bob sobre PostgreSQL e RRF",
+      content:
+        "Informação confidencial de outro usuário que nunca pode aparecer em conexões semânticas nem no histórico da Alice.",
+      tags: ["arquitetura", "rag"],
+    });
+
+    // 1. Semantic Related Items Discovery (`findRelatedItems` + `getItemDetail`)
+    const relatedToA = await findRelatedItems({
+      ownerId: alice.id,
+      itemId: noteA.item.id,
+      limit: 5,
+    });
+    expect(relatedToA.length).toBeGreaterThanOrEqual(1);
+    expect(relatedToA[0].id).toBe(noteB.item.id);
+    expect(relatedToA[0].sharedTags).toContain("arquitetura");
+    expect(relatedToA.some((r) => r.title.includes("Secreto do Bob"))).toBe(false);
+
+    // 2. Offline Snapshot Generation (`createOfflineSnapshotForItem`) & Markdown Export
+    const exportedMd = await exportSingleItemAsMarkdown(alice.id, noteA.item.id);
+    expect(exportedMd.markdown).toContain("sha256_integrity:");
+    expect(exportedMd.markdown).toContain("Reciprocal Rank Fusion");
+
+    const snapshotAsset = await createOfflineSnapshotForItem(alice.id, noteA.item.id);
+    expect(snapshotAsset.originalFileName).toMatch(/^snapshot-.*\.md$/);
+    expect(snapshotAsset.mimeType).toBe("text/markdown");
+
+    const detailAfterSnapshot = await getItemDetail(alice.id, noteA.item.id);
+    expect(detailAfterSnapshot.assets.some((a) => a.id === snapshotAsset.id)).toBe(true);
+    expect(detailAfterSnapshot.relatedItems.some((r) => r.id === noteB.item.id)).toBe(true);
+
+    // 3. Embedding Index Coverage & Drift Diagnostics (`getEmbeddingIndexDiagnostics`)
+    const embDiag = await getEmbeddingIndexDiagnostics(alice.id);
+    expect(embDiag.totalActiveItems).toBe(2);
+    expect(embDiag.coveragePercent).toBe(100);
+    expect(embDiag.hasDimensionMismatch).toBe(false);
+
+    // 4. Auditable RAG Conversation History & Privacy Retention (`list`, `get`, `purge`)
+    const ragRes = await askKnowledgeAssistant({
+      ownerId: alice.id,
+      question: "Como funciona a busca híbrida RRF no PostgreSQL?",
+      saveHistory: true,
+    });
+    expect(ragRes.conversationId).toBeDefined();
+    expect(ragRes.citations.length).toBeGreaterThanOrEqual(1);
+
+    const convList = await listAssistantConversations(alice.id);
+    expect(convList).toHaveLength(1);
+    expect(convList[0].id).toBe(ragRes.conversationId);
+
+    const convDetail = await getAssistantConversationMessages(
+      alice.id,
+      ragRes.conversationId!
+    );
+    expect(convDetail.messages).toHaveLength(2);
+    expect(convDetail.messages[1].role).toBe("assistant");
+    expect(convDetail.messages[1].citationsJson.length).toBeGreaterThanOrEqual(1);
+
+    // Bob cannot read Alice's RAG conversation (anti-IDOR)
+    await expect(
+      getAssistantConversationMessages(bob.id, ragRes.conversationId!)
+    ).rejects.toThrow(/Acesso negado/i);
+
+    const purged = await purgeAssistantHistory(alice.id);
+    expect(purged.deletedConversationsCount).toBe(1);
+    expect(await listAssistantConversations(alice.id)).toHaveLength(0);
+
+    // 5. Model Context Protocol (MCP JSON-RPC 2.0 Server)
+    const mcpInit = await handleMcpJsonRpcRequest(alice.id, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+    });
+    expect(mcpInit?.result).toMatchObject({
+      serverInfo: { name: "comnois-knowledge-mcp", version: "1.4.0" },
+    });
+
+    const mcpTools = await handleMcpJsonRpcRequest(alice.id, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    });
+    const toolsList = (mcpTools?.result as { tools: Array<{ name: string }> }).tools;
+    expect(toolsList.map((t) => t.name)).toContain("comnois_search");
+    expect(toolsList.map((t) => t.name)).toContain("comnois_ask_rag");
+
+    const mcpCallSearch = await handleMcpJsonRpcRequest(alice.id, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "comnois_search",
+        arguments: { query: "Reciprocal Rank Fusion #rag" },
+      },
+    });
+    const callText = (
+      mcpCallSearch?.result as { content: Array<{ text: string }> }
+    ).content[0].text;
+    const parsedSearch = JSON.parse(callText) as { total: number };
+    expect(parsedSearch.total).toBeGreaterThanOrEqual(1);
+  });
 });
+
 

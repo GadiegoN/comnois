@@ -3,6 +3,10 @@ import { getDb } from "@/db";
 import { assets, items, processingJobs } from "@/db/schema";
 import { getQueueMetrics } from "@/server/jobs/queue";
 import { getUserAiUsageSummary } from "@/server/ai/providers";
+import {
+  EmbeddingIndexDiagnostics,
+  getEmbeddingIndexDiagnostics,
+} from "@/server/search";
 import { getStorageProvider } from "@/server/storage";
 import { logger } from "@/lib/logger";
 
@@ -24,6 +28,7 @@ export interface SystemHealthReport {
     integrityVerifiedCount: number;
     missingBlobsCount: number;
   };
+  embeddingIndex?: EmbeddingIndexDiagnostics;
   aiUsageToday?: {
     totalTokensToday: number;
     dailyTokenLimit: number;
@@ -67,6 +72,9 @@ export async function getSystemHealthAndBackupIntegrity(
   }
 
   const aiUsageToday = ownerId ? await getUserAiUsageSummary(ownerId) : undefined;
+  const embeddingIndex = ownerId
+    ? await getEmbeddingIndexDiagnostics(ownerId)
+    : undefined;
 
   const isDegraded =
     missingBlobsCount > 0 || queue.oldestPendingAgeMs > 1000 * 60 * 30;
@@ -89,6 +97,7 @@ export async function getSystemHealthAndBackupIntegrity(
       integrityVerifiedCount,
       missingBlobsCount,
     },
+    ...(embeddingIndex ? { embeddingIndex } : {}),
     ...(aiUsageToday ? { aiUsageToday } : {}),
     recentLogs: logger.getRecentLogs().slice(-20),
   };

@@ -1,6 +1,14 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt } from "drizzle-orm";
 import { getDb } from "@/db";
-import { items, documentChunks, embeddings } from "@/db/schema";
+import {
+  items,
+  documentChunks,
+  embeddings,
+  assistantConversations,
+  assistantMessages,
+} from "@/db/schema";
+import { generateId } from "@/lib/security/crypto";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { normalizeSearchText } from "@/server/search/chunker";
 import {
   checkAndRecordAiUsage,
@@ -57,6 +65,7 @@ export interface VerifiedCitation {
 }
 
 export interface AssistantQueryResult {
+  conversationId?: string;
   question: string;
   answer: string;
   directEvidenceSummary: string[];
@@ -74,6 +83,8 @@ export async function askKnowledgeAssistant(input: {
   ownerId: string;
   workspaceId?: string | null;
   question: string;
+  conversationId?: string;
+  saveHistory?: boolean;
   itemIdsFilter?: string[];
   maxSources?: number;
   customProvider?: AIProviderAdapter;
@@ -397,37 +408,222 @@ export async function askKnowledgeAssistant(input: {
     .map((id) => citationMap.get(id)!)
     .filter(Boolean);
 
-  if (!generation.output.insufficientEvidence && verifiedCitations.length === 0) {
-    return {
-      question,
-      answer:
-        "O modelo não conseguiu vincular a resposta a citações válidas das fontes recuperadas. Confira abaixo os trechos diretamente localizados no seu acervo.",
-      directEvidenceSummary: groundedSnippets.map(
-        (s) => `[${s.citationId}] (${s.title}): "${s.text.slice(0, 220)}"`
-      ),
-      synthesisNotes: [
-        "Resposta livre descartada pela validação de segurança por ausência de citações verificáveis.",
-      ],
-      citations: [...citationMap.values()],
-      hasConflict: false,
-      insufficientEvidence: true,
-      promptInjectionNeutralized,
-      scopeNote: `Recuperados ${groundedSnippets.length} trechos de ${filteredItems.length} itens autorizados.`,
-      providerUsed: caps.provider,
-    };
+  const finalResult: AssistantQueryResult =
+    !generation.output.insufficientEvidence && verifiedCitations.length === 0
+      ? {
+          question,
+          answer:
+            "O modelo não conseguiu vincular a resposta a citações válidas das fontes recuperadas. Confira abaixo os trechos diretamente localizados no seu acervo.",
+          directEvidenceSummary: groundedSnippets.map(
+            (s) => `[${s.citationId}] (${s.title}): "${s.text.slice(0, 220)}"`
+          ),
+          synthesisNotes: [
+            "Resposta livre descartada pela validação de segurança por ausência de citações verificáveis.",
+          ],
+          citations: [...citationMap.values()],
+          hasConflict: false,
+          insufficientEvidence: true,
+          promptInjectionNeutralized,
+          scopeNote: `Recuperados ${groundedSnippets.length} trechos de ${filteredItems.length} itens autorizados.`,
+          providerUsed: caps.provider,
+        }
+      : {
+          question,
+          answer: sanitizedAnswer,
+          directEvidenceSummary: generation.output.directEvidenceSummary,
+          synthesisNotes: generation.output.synthesisNotes,
+          citations: verifiedCitations,
+          hasConflict: generation.output.hasConflict,
+          conflictExplanation: generation.output.conflictExplanation,
+          insufficientEvidence: generation.output.insufficientEvidence,
+          promptInjectionNeutralized,
+          scopeNote: `Resposta baseada em ${verifiedCitations.length} trecho(s) recuperado(s) dentre ${filteredItems.length} item(ns) ativos da sua biblioteca.`,
+          providerUsed: caps.provider,
+        };
+
+  if (input.saveHistory !== false) {
+    const now = new Date();
+    let activeConversationId = input.conversationId;
+
+    if (activeConversationId) {
+      const [existingConv] = await db
+        .select()
+        .from(assistantConversations)
+        .where(eq(assistantConversations.id, activeConversationId))
+        .limit(1);
+
+      if (!existingConv || existingConv.ownerId !== input.ownerId) {
+        activeConversationId = undefined;
+      } else {
+        await db
+          .update(assistantConversations)
+          .set({ updatedAt: now })
+          .where(eq(assistantConversations.id, activeConversationId));
+      }
+    }
+
+    if (!activeConversationId) {
+      activeConversationId = generateId("cnv");
+      await db.insert(assistantConversations).values({
+        id: activeConversationId,
+        ownerId: input.ownerId,
+        workspaceId: input.workspaceId ?? null,
+        title: question.slice(0, 100),
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await db.insert(assistantMessages).values([
+      {
+        id: generateId("msg"),
+        conversationId: activeConversationId,
+        ownerId: input.ownerId,
+        role: "user",
+        content: question,
+        citationsJson: [],
+        metadataJson: {},
+        createdAt: now,
+      },
+      {
+        id: generateId("msg"),
+        conversationId: activeConversationId,
+        ownerId: input.ownerId,
+        role: "assistant",
+        content: finalResult.answer,
+        citationsJson: finalResult.citations as unknown as Array<Record<string, unknown>>,
+        metadataJson: {
+          directEvidenceSummary: finalResult.directEvidenceSummary,
+          synthesisNotes: finalResult.synthesisNotes,
+          hasConflict: finalResult.hasConflict,
+          conflictExplanation: finalResult.conflictExplanation,
+          insufficientEvidence: finalResult.insufficientEvidence,
+          promptInjectionNeutralized: finalResult.promptInjectionNeutralized,
+          scopeNote: finalResult.scopeNote,
+          providerUsed: finalResult.providerUsed,
+        },
+        createdAt: new Date(now.getTime() + 1),
+      },
+    ]);
+
+    finalResult.conversationId = activeConversationId;
   }
 
+  return finalResult;
+}
+
+export async function listAssistantConversations(
+  ownerId: string,
+  workspaceId?: string | null
+) {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(assistantConversations)
+    .where(
+      workspaceId
+        ? and(
+            eq(assistantConversations.ownerId, ownerId),
+            eq(assistantConversations.workspaceId, workspaceId)
+          )
+        : eq(assistantConversations.ownerId, ownerId)
+    )
+    .orderBy(desc(assistantConversations.updatedAt))
+    .limit(50);
+
+  return rows;
+}
+
+export async function getAssistantConversationMessages(
+  ownerId: string,
+  conversationId: string
+) {
+  const db = await getDb();
+  const [conv] = await db
+    .select()
+    .from(assistantConversations)
+    .where(eq(assistantConversations.id, conversationId))
+    .limit(1);
+
+  if (!conv) {
+    throw new NotFoundError("Conversa não encontrada.");
+  }
+  if (conv.ownerId !== ownerId) {
+    throw new ForbiddenError("Acesso negado a esta conversa.");
+  }
+
+  const messages = await db
+    .select()
+    .from(assistantMessages)
+    .where(eq(assistantMessages.conversationId, conversationId))
+    .orderBy(asc(assistantMessages.createdAt));
+
   return {
-    question,
-    answer: sanitizedAnswer,
-    directEvidenceSummary: generation.output.directEvidenceSummary,
-    synthesisNotes: generation.output.synthesisNotes,
-    citations: verifiedCitations,
-    hasConflict: generation.output.hasConflict,
-    conflictExplanation: generation.output.conflictExplanation,
-    insufficientEvidence: generation.output.insufficientEvidence,
-    promptInjectionNeutralized,
-    scopeNote: `Resposta baseada em ${verifiedCitations.length} trecho(s) recuperado(s) dentre ${filteredItems.length} item(ns) ativos da sua biblioteca.`,
-    providerUsed: caps.provider,
+    conversation: conv,
+    messages,
   };
 }
+
+export async function deleteAssistantConversation(
+  ownerId: string,
+  conversationId: string
+): Promise<void> {
+  const db = await getDb();
+  const [conv] = await db
+    .select()
+    .from(assistantConversations)
+    .where(eq(assistantConversations.id, conversationId))
+    .limit(1);
+
+  if (!conv) {
+    throw new NotFoundError("Conversa não encontrada.");
+  }
+  if (conv.ownerId !== ownerId) {
+    throw new ForbiddenError("Acesso negado a esta conversa.");
+  }
+
+  await db
+    .delete(assistantConversations)
+    .where(eq(assistantConversations.id, conversationId));
+}
+
+export async function purgeAssistantHistory(
+  ownerId: string,
+  options?: { olderThanDays?: number }
+): Promise<{ deletedConversationsCount: number }> {
+  const db = await getDb();
+  const existing = await db
+    .select({
+      id: assistantConversations.id,
+      updatedAt: assistantConversations.updatedAt,
+    })
+    .from(assistantConversations)
+    .where(eq(assistantConversations.ownerId, ownerId));
+
+  if (existing.length === 0) {
+    return { deletedConversationsCount: 0 };
+  }
+
+  if (options?.olderThanDays !== undefined && options.olderThanDays > 0) {
+    const cutoff = new Date(Date.now() - options.olderThanDays * 86_400_000);
+    const toDelete = existing.filter((c) => c.updatedAt < cutoff);
+    if (toDelete.length > 0) {
+      await db
+        .delete(assistantConversations)
+        .where(
+          and(
+            eq(assistantConversations.ownerId, ownerId),
+            lt(assistantConversations.updatedAt, cutoff)
+          )
+        );
+    }
+    return { deletedConversationsCount: toDelete.length };
+  }
+
+  await db
+    .delete(assistantConversations)
+    .where(eq(assistantConversations.ownerId, ownerId));
+
+  return { deletedConversationsCount: existing.length };
+}
+

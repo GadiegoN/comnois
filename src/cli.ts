@@ -4,12 +4,18 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { items, users } from "@/db/schema";
 import { registerUser } from "@/server/services/auth";
-import { createLinkItem, createNoteItem, updateItem } from "@/server/services/items";
+import {
+  createLinkItem,
+  createNoteItem,
+  createOfflineSnapshotForItem,
+  updateItem,
+} from "@/server/services/items";
 import { createCollection, listUserCollections } from "@/server/services/organization";
-import { searchLibrary } from "@/server/search";
+import { findRelatedItems, searchLibrary } from "@/server/search";
 import { askKnowledgeAssistant } from "@/server/ai/assistant";
 import { getSystemHealthAndBackupIntegrity } from "@/server/services/observability";
 import { runSearchAndRagEvaluationBenchmark } from "@/server/search/evaluator";
+import { handleMcpJsonRpcRequest, JsonRpcRequest } from "@/server/mcp";
 import {
   exportLibraryAsCsv,
   exportLibraryAsNetscapeHtml,
@@ -40,12 +46,15 @@ export async function runCliCommand(argv: string[]): Promise<string> {
       "Comandos disponíveis:",
       '  pnpm cli ingest-docs [dir]            Importa e indexa os documentos Markdown de docs/ no acervo',
       '  pnpm cli search "<query-ou-dsl>"      Pesquisa itens (suporta is:fav, type:link, site:..., #tag)',
+      '  pnpm cli related <itemId>             Descobre itens semanticamente conectados via embeddings/tags',
+      '  pnpm cli snapshot <itemId>            Gera um snapshot arquivístico offline (.md) no storage privado',
       '  pnpm cli add-link <url> "[titulo]"    Salva um link na biblioteca e enfileira extração',
       '  pnpm cli add-note "<titulo>" "<txt>"  Cria e indexa uma nota imediatamente (suporta #tags e is:fav)',
       '  pnpm cli ask "<pergunta>"             Consulta o Assistente RAG com citações verificadas',
       "  pnpm cli export [json|html|csv]       Exporta a biblioteca no formato desejado",
-      "  pnpm cli health                       Exibe diagnóstico de banco, fila e integridade de blobs",
+      "  pnpm cli health                       Exibe diagnóstico de banco, fila, vetores e integridade de blobs",
       "  pnpm cli benchmark                    Executa o benchmark quantitativo de Busca & RAG",
+      '  pnpm cli mcp ["<jsonrpc-request>"]    Executa chamada(s) Model Context Protocol (JSON-RPC 2.0)',
     ].join("\n");
   }
 
@@ -265,6 +274,43 @@ export async function runCliCommand(argv: string[]): Promise<string> {
   if (command === "benchmark") {
     const report = await runSearchAndRagEvaluationBenchmark(userId);
     return JSON.stringify(report, null, 2);
+  }
+
+  if (command === "related") {
+    const [itemId] = rest;
+    if (!itemId) {
+      throw new Error("Uso: pnpm cli related <itemId>");
+    }
+    const related = await findRelatedItems({
+      ownerId: userId,
+      itemId,
+      limit: 5,
+    });
+    return JSON.stringify({ itemId, related }, null, 2);
+  }
+
+  if (command === "snapshot") {
+    const [itemId] = rest;
+    if (!itemId) {
+      throw new Error("Uso: pnpm cli snapshot <itemId>");
+    }
+    const snap = await createOfflineSnapshotForItem(userId, itemId);
+    return JSON.stringify({ snapshot: snap }, null, 2);
+  }
+
+  if (command === "mcp") {
+    const rawJson = rest.join(" ").trim();
+    if (!rawJson) {
+      const initRes = await handleMcpJsonRpcRequest(userId, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+      });
+      return JSON.stringify(initRes, null, 2);
+    }
+    const parsedReq = JSON.parse(rawJson) as JsonRpcRequest;
+    const mcpRes = await handleMcpJsonRpcRequest(userId, parsedReq);
+    return JSON.stringify(mcpRes ?? { ok: true }, null, 2);
   }
 
   throw new Error(`Comando desconhecido: ${command}. Use "pnpm cli help".`);

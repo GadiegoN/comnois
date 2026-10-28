@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 — 2026-10-28 — Histórico RAG com Retenção, Conexões Semânticas, Snapshots Offline, Diagnóstico Vetorial e Servidor MCP
+- Implementado **Histórico Auditável de Conversas do Assistente RAG & Controle de Retenção de Privacidade** (`assistant_conversations` e `assistant_messages` na migração `drizzle/0004_worried_rumiko_fujikawa.sql`, `listAssistantConversations`, `getAssistantConversationMessages`, `deleteAssistantConversation` e `purgeAssistantHistory` em `src/server/ai/assistant.ts`).
+- Implementada **Descoberta Semântica de Itens Relacionados ("Conexões do Conhecimento")** (`findRelatedItems` em `src/server/search/index.ts`), combinando similaridade de cosseno entre embeddings de chunks, interseção de etiquetas e domínio com isolamento estrito por usuário.
+- Implementados **Snapshots Imutáveis de Leitura Offline & Exportação Individual Markdown (`.md`)** (`createOfflineSnapshotForItem` e `exportSingleItemAsMarkdown` em `src/server/services/items.ts`), preservando metadados YAML, destaques e hash de integridade SHA-256 no storage privado.
+- Implementado **Diagnóstico de Cobertura & Consistência do Índice Vetorial** (`getEmbeddingIndexDiagnostics` em `src/server/search/index.ts` e integrado ao `/api/health`), detectando divergências de dimensão/modelo (`hasModelDrift`, `hasDimensionMismatch`) e estimando custo de reindexação.
+- Implementado **Servidor Model Context Protocol (MCP — JSON-RPC 2.0)** (`src/server/mcp.ts` e `pnpm cli mcp`), expondo `comnois_search`, `comnois_ask_rag`, `comnois_related_items`, `comnois_add_note` e `comnois_add_link` para integração com agentes externos.
+
 ## 1.3.0 — 2026-10-28 — Hierarquia de Coleções Anti-Ciclo, CLI Oficial e Exclusão Completa LGPD/GDPR
 - Implementada **Hierarquia de Coleções com Prevenção de Ciclos** (`parentId` na migração `drizzle/0003_curly_lionheart.sql`, `moveCollection` e `assertNoCollectionCycle` em `src/server/services/organization.ts`).
 - Implementado o **Cliente de Linha de Comando (CLI Oficial)** em `src/cli.ts` (`pnpm cli search|add-link|add-note|ask|export|health|benchmark`).

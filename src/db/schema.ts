@@ -629,5 +629,60 @@ export const rssFeeds = pgTable(
   ]
 );
 
+// ============================================================================
+// 8. HISTÓRICO AUDITÁVEL DO ASSISTENTE RAG E GOVERNANÇA DE RETENÇÃO
+// ============================================================================
+
+export const assistantConversations = pgTable(
+  "assistant_conversations",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    title: text("title").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("assistant_conversations_owner_idx").on(table.ownerId, table.updatedAt),
+  ]
+);
+
+export const assistantMessages = pgTable(
+  "assistant_messages",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => assistantConversations.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    citationsJson: jsonb("citations_json")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default([]),
+    metadataJson: jsonb("metadata_json")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("assistant_messages_conversation_idx").on(
+      table.conversationId,
+      table.createdAt
+    ),
+    index("assistant_messages_owner_idx").on(table.ownerId),
+  ]
+);
+
+
 
 

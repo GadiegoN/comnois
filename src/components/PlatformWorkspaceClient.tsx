@@ -153,6 +153,7 @@ export default function PlatformWorkspaceClient({
 
   // Detail Drawer State
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false);
   const [itemDetail, setItemDetail] = useState<{
     item: SearchItem & { contentVersion: number };
     content: { noteText: string | null; extractedText: string | null; extractionOrigin: string } | null;
@@ -161,6 +162,16 @@ export default function PlatformWorkspaceClient({
     collections: Array<{ id: string; name: string }>;
     highlights: Array<{ id: string; quote: string; note: string | null }>;
     jobs: Array<{ id: string; jobType: string; status: string; attempts: number; lastError: string | null }>;
+    relatedItems?: Array<{
+      id: string;
+      type: string;
+      title: string;
+      originalUrl: string | null;
+      domain: string | null;
+      similarityScore: number;
+      sharedTags: string[];
+      connectionReason: string;
+    }>;
   } | null>(null);
   const [highlightQuote, setHighlightQuote] = useState("");
   const [highlightNote, setHighlightNote] = useState("");
@@ -190,6 +201,9 @@ export default function PlatformWorkspaceClient({
   const [askingAssistant, setAskingAssistant] = useState(false);
   const [assistantResult, setAssistantResult] = useState<AssistantAnswer | null>(null);
   const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [assistantConversations, setAssistantConversations] = useState<
+    Array<{ id: string; title: string; updatedAt: string }>
+  >([]);
 
   // Jobs State
   const [queueMetrics, setQueueMetrics] = useState<{
@@ -210,6 +224,20 @@ export default function PlatformWorkspaceClient({
     status: string;
     database: { connected: boolean; latencyMs: number };
     storage: { totalFiles: number; totalBytes: number; integrityVerifiedCount: number; missingBlobsCount: number };
+    embeddingIndex?: {
+      totalActiveItems: number;
+      totalChunks: number;
+      embeddedChunksCount: number;
+      missingEmbeddingsCount: number;
+      coveragePercent: number;
+      configuredProvider: string;
+      configuredModel: string;
+      configuredDimensions: number;
+      hasModelDrift: boolean;
+      hasDimensionMismatch: boolean;
+      estimatedTokensToReembed: number;
+      recommendation: string;
+    };
   } | null>(null);
   const [benchmarkReport, setBenchmarkReport] = useState<{
     modes: Record<"lexical" | "semantic" | "hybrid", { recallAt3: number; mrr: number }>;
@@ -550,6 +578,43 @@ export default function PlatformWorkspaceClient({
     }
   }
 
+  async function loadAssistantConversations() {
+    const res = await fetch("/api/assistant");
+    if (res.ok) {
+      const data = await res.json();
+      setAssistantConversations(data.conversations ?? []);
+    }
+  }
+
+  async function openAssistantConversation(conversationId: string) {
+    const res = await fetch(`/api/assistant?conversationId=${conversationId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const msgs = data.messages ?? [];
+      const userMsg = msgs.find((m: { role: string }) => m.role === "user");
+      const assistantMsg = [...msgs]
+        .reverse()
+        .find((m: { role: string }) => m.role === "assistant");
+      if (assistantMsg) {
+        const meta = assistantMsg.metadataJson ?? {};
+        setQuestion(userMsg?.content ?? data.conversation?.title ?? "");
+        setAssistantResult({
+          question: userMsg?.content ?? data.conversation?.title ?? "",
+          answer: assistantMsg.content,
+          directEvidenceSummary: meta.directEvidenceSummary ?? [],
+          synthesisNotes: meta.synthesisNotes ?? [],
+          citations: assistantMsg.citationsJson ?? [],
+          hasConflict: Boolean(meta.hasConflict),
+          conflictExplanation: meta.conflictExplanation,
+          insufficientEvidence: Boolean(meta.insufficientEvidence),
+          promptInjectionNeutralized: Boolean(meta.promptInjectionNeutralized),
+          scopeNote: meta.scopeNote ?? "Conversa recuperada do histórico.",
+          providerUsed: meta.providerUsed ?? "extractive",
+        });
+      }
+    }
+  }
+
   async function handleAskAssistant(e: React.FormEvent) {
     e.preventDefault();
     if (!question.trim()) return;
@@ -567,6 +632,7 @@ export default function PlatformWorkspaceClient({
         throw new Error(data.error?.message || "Falha ao consultar assistente.");
       }
       setAssistantResult(data);
+      await loadAssistantConversations();
     } catch (err) {
       setAssistantError(err instanceof Error ? err.message : "Erro ao consultar IA.");
     } finally {
@@ -691,7 +757,10 @@ export default function PlatformWorkspaceClient({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("assistant")}
+              onClick={() => {
+                setActiveTab("assistant");
+                void loadAssistantConversations();
+              }}
               className={`px-3 py-2 rounded-lg flex items-center gap-1.5 transition cursor-pointer ${
                 activeTab === "assistant"
                   ? "bg-indigo-600 text-white"
@@ -1471,6 +1540,66 @@ export default function PlatformWorkspaceClient({
                 )}
               </section>
             )}
+
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-400" /> Histórico de Consultas RAG & Retenção de Privacidade
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Reabra consultas anteriores com suas citações verificadas ou limpe o histórico a qualquer momento.
+                  </p>
+                </div>
+                {assistantConversations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await fetch("/api/assistant", { method: "DELETE" });
+                      await loadAssistantConversations();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800 text-xs text-red-200 cursor-pointer"
+                  >
+                    Limpar Todo o Histórico
+                  </button>
+                )}
+              </div>
+
+              {assistantConversations.length === 0 ? (
+                <div className="text-xs text-slate-500">
+                  Nenhuma conversa armazenada no histórico no momento.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {assistantConversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openAssistantConversation(conv.id)}
+                        className="text-left flex-1 truncate text-slate-200 hover:text-indigo-300 font-medium cursor-pointer"
+                      >
+                        {conv.title}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await fetch(`/api/assistant?conversationId=${conv.id}`, {
+                            method: "DELETE",
+                          });
+                          await loadAssistantConversations();
+                        }}
+                        className="text-red-400 hover:text-red-300 px-2 py-0.5"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
         )}
 
@@ -1975,25 +2104,67 @@ export default function PlatformWorkspaceClient({
               </div>
 
               {healthDiagnostics && (
-                <div className="mb-6 p-4 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <span className="text-slate-400 block">Saúde do Sistema & Banco</span>
-                    <span className="font-semibold text-emerald-400">
-                      {healthDiagnostics.status.toUpperCase()} ({healthDiagnostics.database.latencyMs}ms)
-                    </span>
+                <div className="mb-6 p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-slate-400 block">Saúde do Sistema & Banco</span>
+                      <span className="font-semibold text-emerald-400">
+                        {healthDiagnostics.status.toUpperCase()} ({healthDiagnostics.database.latencyMs}ms)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Arquivos Privados Armazenados</span>
+                      <span className="font-semibold text-white">
+                        {healthDiagnostics.storage.totalFiles} arquivo(s) ({Math.round(healthDiagnostics.storage.totalBytes / 1024)} KB)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Integridade de Backup / Blobs</span>
+                      <span className="font-semibold text-white">
+                        {healthDiagnostics.storage.integrityVerifiedCount}/{healthDiagnostics.storage.totalFiles} íntegros ({healthDiagnostics.storage.missingBlobsCount} ausentes)
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block">Arquivos Privados Armazenados</span>
-                    <span className="font-semibold text-white">
-                      {healthDiagnostics.storage.totalFiles} arquivo(s) ({Math.round(healthDiagnostics.storage.totalBytes / 1024)} KB)
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Integridade de Backup / Blobs</span>
-                    <span className="font-semibold text-white">
-                      {healthDiagnostics.storage.integrityVerifiedCount}/{healthDiagnostics.storage.totalFiles} íntegros ({healthDiagnostics.storage.missingBlobsCount} ausentes)
-                    </span>
-                  </div>
+
+                  {healthDiagnostics.embeddingIndex && (
+                    <div className="pt-3 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <span className="text-slate-400 block">Cobertura Vetorial</span>
+                        <span className="font-semibold text-indigo-300">
+                          {healthDiagnostics.embeddingIndex.coveragePercent}% ({healthDiagnostics.embeddingIndex.embeddedChunksCount}/{healthDiagnostics.embeddingIndex.totalChunks} chunks)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Modelo & Dimensões</span>
+                        <span className="font-semibold text-white">
+                          {healthDiagnostics.embeddingIndex.configuredModel} ({healthDiagnostics.embeddingIndex.configuredDimensions}d)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Consistência de Modelo</span>
+                        <span
+                          className={`font-semibold ${
+                            healthDiagnostics.embeddingIndex.hasDimensionMismatch ||
+                            healthDiagnostics.embeddingIndex.hasModelDrift
+                              ? "text-amber-400"
+                              : "text-emerald-400"
+                          }`}
+                        >
+                          {healthDiagnostics.embeddingIndex.hasDimensionMismatch
+                            ? "Divergência de Dimensões"
+                            : healthDiagnostics.embeddingIndex.hasModelDrift
+                            ? "Modelo Misto Detectado"
+                            : "Uniforme"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Recomendação</span>
+                        <span className="text-slate-300">
+                          {healthDiagnostics.embeddingIndex.recommendation}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2752,14 +2923,45 @@ export default function PlatformWorkspaceClient({
                 placeholder="Resumo ou descrição do item"
                 className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-white"
               />
-              <div className="flex justify-between items-center">
-                <button
-                  type="button"
-                  onClick={() => handleRetryItem(itemDetail.item.id)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Reprocessar Extração / IA
-                </button>
+              <div className="flex flex-wrap justify-between items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRetryItem(itemDetail.item.id)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reprocessar Extração / IA
+                  </button>
+                  <button
+                    type="button"
+                    disabled={creatingSnapshot}
+                    onClick={async () => {
+                      setCreatingSnapshot(true);
+                      try {
+                        const res = await fetch(`/api/items/${itemDetail.item.id}`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "create_snapshot" }),
+                        });
+                        if (res.ok) {
+                          await openItemDetail(itemDetail.item.id);
+                        }
+                      } finally {
+                        setCreatingSnapshot(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 border border-emerald-700 text-xs text-emerald-200 inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Archive className="w-3.5 h-3.5" />{" "}
+                    {creatingSnapshot ? "Gerando Snapshot..." : "Gerar Snapshot Offline (.md)"}
+                  </button>
+                  <a
+                    href={`/api/items/${itemDetail.item.id}?format=markdown`}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 inline-flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Baixar .md
+                  </a>
+                </div>
                 <button
                   type="button"
                   onClick={async () => {
@@ -2944,6 +3146,37 @@ export default function PlatformWorkspaceClient({
                 ))}
               </div>
             </div>
+
+            {/* Related Items (Semantic Connections) */}
+            {itemDetail.relatedItems && itemDetail.relatedItems.length > 0 && (
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" /> Conexões Semânticas & Itens Relacionados
+                </h3>
+                <div className="space-y-2">
+                  {itemDetail.relatedItems.map((rel) => (
+                    <button
+                      key={rel.id}
+                      type="button"
+                      onClick={() => openItemDetail(rel.id)}
+                      className="w-full text-left p-3 rounded-xl bg-slate-950 hover:bg-slate-800/80 border border-slate-800 flex items-center justify-between gap-3 text-xs transition cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-white truncate">
+                          {rel.title}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {rel.connectionReason}
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded bg-indigo-950 border border-indigo-800 text-indigo-300 font-mono text-[11px] shrink-0">
+                        {Math.round(rel.similarityScore * 100)}%
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
