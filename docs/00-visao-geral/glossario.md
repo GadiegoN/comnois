@@ -1,0 +1,21 @@
+# Glossário
+
+- **Item:** registro principal da biblioteca, como link, nota ou arquivo.
+- **Captura:** ação de adicionar um item à biblioteca.
+- **Conteúdo extraído:** texto e metadados obtidos do material original.
+- **Ativo/asset:** arquivo binário armazenado, como PDF ou imagem.
+- **Coleção:** agrupamento de itens. Pode ser manual ou, futuramente, inteligente.
+- **Etiqueta/tag:** rótulo reutilizável associado a itens.
+- **Destaque/highlight:** trecho selecionado de um conteúdo.
+- **Job/tarefa:** trabalho executado em segundo plano, como extrair texto ou gerar embeddings.
+- **Worker:** processo que consome e executa jobs fora do pedido web.
+- **Embedding:** representação numérica de texto usada para comparar similaridade semântica.
+- **Pesquisa lexical:** pesquisa por palavras e termos.
+- **Pesquisa semântica:** pesquisa por proximidade de significado, mesmo sem coincidência literal.
+- **Pesquisa híbrida:** combinação de resultados lexicais e semânticos.
+- **RAG:** recuperação de trechos relevantes de fontes para fornecer contexto a um modelo antes de gerar uma resposta.
+- **Citação verificável:** referência a um item e a um trecho que o usuário pode abrir e conferir.
+- **Workspace:** espaço de dados e membros com regras próprias de acesso.
+- **SSRF:** ataque no qual um serviço é induzido a acessar destinos de rede que não deveria acessar.
+- **Prompt injection:** tentativa de fazer conteúdo não confiável alterar as instruções ou prioridades do modelo.
+- **Portabilidade:** capacidade de exportar e reutilizar dados fora da plataforma.
