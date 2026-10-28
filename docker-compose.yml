@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: comnois-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: comnois
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-comnois_secret_password}
+      POSTGRES_DB: comnois
+    ports:
+      - "5432:5432"
+    volumes:
+      - comnois_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comnois -d comnois"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comnois-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://comnois:${POSTGRES_PASSWORD:-comnois_secret_password}@postgres:5432/comnois
+      AUTH_SECRET: ${AUTH_SECRET:-change-this-production-secret-key-at-least-32-chars}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_PATH: /app/.data/storage
+      AI_DEFAULT_PROVIDER: ${AI_DEFAULT_PROVIDER:-extractive}
+    ports:
+      - "3000:3000"
+    volumes:
+      - comnois_storage:/app/.data/storage
+    command: sh -c "pnpm db:migrate && pnpm start"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comnois-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://comnois:${POSTGRES_PASSWORD:-comnois_secret_password}@postgres:5432/comnois
+      AUTH_SECRET: ${AUTH_SECRET:-change-this-production-secret-key-at-least-32-chars}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_PATH: /app/.data/storage
+      AI_DEFAULT_PROVIDER: ${AI_DEFAULT_PROVIDER:-extractive}
+    volumes:
+      - comnois_storage:/app/.data/storage
+    command: pnpm worker
+
+volumes:
+  comnois_pgdata:
+  comnois_storage:
+

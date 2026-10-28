@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Comnois Knowledge — Captura Rápida",
+  "version": "1.0.0",
+  "description": "Salve links e notas diretamente na sua Plataforma Inteligente de Conhecimento Comnois.",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["http://localhost:3000/*", "https://*/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Salvar no Comnois"
+  }
+}
+

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Comnois Capture</title>
+    <style>
+      body {
+        width: 340px;
+        margin: 0;
+        padding: 14px;
+        background: #090d16;
+        color: #f1f5f9;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 12px;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 10px 0;
+        color: #fff;
+      }
+      label {
+        display: block;
+        margin-top: 8px;
+        margin-bottom: 3px;
+        color: #94a3b8;
+      }
+      input, textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 7px 9px;
+        border-radius: 6px;
+        border: 1px solid #1e293b;
+        background: #0f172a;
+        color: #f8fafc;
+        font-size: 12px;
+      }
+      button {
+        margin-top: 12px;
+        width: 100%;
+        padding: 8px 12px;
+        border: 0;
+        border-radius: 6px;
+        background: #4f46e5;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #6366f1;
+      }
+      .status {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        display: none;
+      }
+      .status.ok {
+        display: block;
+        background: #064e3b;
+        color: #a7f3d0;
+      }
+      .status.err {
+        display: block;
+        background: #7f1d1d;
+        color: #fecaca;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Comnois — Captura Rápida</h1>
+
+    <label for="endpoint">Endpoint da Plataforma</label>
+    <input id="endpoint" type="url" value="http://localhost:3000" />
+
+    <label for="token">Token de API (cmn_...)</label>
+    <input id="token" type="password" placeholder="cmn_..." />
+
+    <label for="url">URL da Aba Atual</label>
+    <input id="url" type="url" />
+
+    <label for="title">Título</label>
+    <input id="title" type="text" />
+
+    <label for="tags">Etiquetas (separadas por vírgula)</label>
+    <input id="tags" type="text" placeholder="leitura, pesquisa" />
+
+    <button id="saveBtn" type="button">Salvar na Biblioteca</button>
+    <div id="statusBox" class="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+
