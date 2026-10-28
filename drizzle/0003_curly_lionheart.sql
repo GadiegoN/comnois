@@ -1,0 +1,1 @@
+ALTER TABLE "collections" ADD COLUMN "parent_id" text;
