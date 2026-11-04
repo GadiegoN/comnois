@@ -233,7 +233,13 @@ export interface AiUsageData {
 }
 
 export interface WorkspacesSettingsData {
-  workspaces?: Array<{ id: string; name: string; slug: string; role: string }>;
+  workspaces?: Array<{
+    id?: string;
+    workspaceId?: string;
+    name: string;
+    slug?: string;
+    role: string;
+  }>;
   owned?: Array<{ id: string; name: string; slug?: string }>;
   apiTokens?: Array<{
     id: string;

@@ -255,6 +255,7 @@ export async function listUserWorkspaces(userId: string) {
   const db = await getDb();
   const memberships = await db
     .select({
+      id: workspaces.id,
       workspaceId: workspaces.id,
       name: workspaces.name,
       ownerId: workspaces.ownerId,

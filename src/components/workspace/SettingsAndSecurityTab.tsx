@@ -127,14 +127,20 @@ export function SettingsAndSecurityTab({
   // LGPD Delete confirmation
   const [lgpdConfirm, setLgpdConfirm] = useState("");
 
-  const workspaceList =
+  const workspaceList = (
     workspacesData?.workspaces ||
     (workspacesData?.owned || []).map((w) => ({
       id: w.id,
+      workspaceId: w.id,
       name: w.name,
       slug: w.slug || w.id,
       role: "owner",
-    }));
+    }))
+  ).map((w, idx) => ({
+    id: w.id || w.workspaceId || `ws-${idx}`,
+    name: w.name,
+    role: w.role || "owner",
+  }));
 
   const usedTokens = aiUsage?.totalTokensToday ?? 0;
   const maxTokens = aiUsage?.dailyTokenLimit ?? (Number(dailyLimit) || 100000);
@@ -295,7 +301,9 @@ export function SettingsAndSecurityTab({
       if (!res.ok) {
         throw new Error(data.error?.message || "Falha ao gerar convite.");
       }
-      setGeneratedInviteToken(data.invite?.token || null);
+      setGeneratedInviteToken(
+        data.invite?.inviteToken || data.invite?.token || null
+      );
       setInviteEmail("");
       onFeedback("Convite gerado com sucesso!");
     } catch (err) {
