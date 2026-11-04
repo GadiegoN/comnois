@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Sparkles,
   Search,
+  Network,
   MessageSquareQuote,
   FolderTree,
   Activity,
@@ -13,6 +14,7 @@ import {
   Plus,
   LogOut,
   Globe,
+  Command,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +27,7 @@ interface WorkspaceHeaderProps {
   onSelectTab: (tab: WorkspaceTabId) => void;
   showCaptureForm: boolean;
   onToggleCaptureForm: () => void;
+  onOpenCommandPalette?: () => void;
   pendingJobsCount: number;
   onLogout: () => void;
 }
@@ -38,6 +41,11 @@ const NAV_TABS: Array<{
     id: "library",
     label: "Biblioteca & Busca",
     icon: <Search className="w-4 h-4" />,
+  },
+  {
+    id: "graph",
+    label: "Grafo de Nós",
+    icon: <Network className="w-4 h-4" />,
   },
   {
     id: "assistant",
@@ -72,6 +80,7 @@ export function WorkspaceHeader({
   onSelectTab,
   showCaptureForm,
   onToggleCaptureForm,
+  onOpenCommandPalette,
   pendingJobsCount,
   onLogout,
 }: WorkspaceHeaderProps) {
@@ -98,6 +107,21 @@ export function WorkspaceHeader({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {onOpenCommandPalette && (
+              <button
+                type="button"
+                onClick={onOpenCommandPalette}
+                title="Abrir paleta de comandos rápidos (Ctrl+K)"
+                className="inline-flex items-center gap-2 rounded-xl bg-inset hover:bg-elevated text-fg-secondary hover:text-fg border border-border-subtle px-3 py-1.5 text-xs font-medium transition-all cursor-pointer"
+              >
+                <Command className="w-3.5 h-3.5 text-brand-text" />
+                <span className="hidden sm:inline">Comandos</span>
+                <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-surface border border-border-subtle text-fg-muted">
+                  Ctrl K
+                </kbd>
+              </button>
+            )}
+
             <ThemeSwitcher />
 
             <Link

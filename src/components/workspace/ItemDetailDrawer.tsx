@@ -377,7 +377,16 @@ export function ItemDetailDrawer({
                     : "Gerar Snapshot Offline (.md)"}
                 </Button>
               </div>
-              <div className="rounded-2xl bg-inset border border-border-subtle p-5 max-h-96 overflow-y-auto text-xs sm:text-sm text-fg whitespace-pre-wrap leading-relaxed font-sans">
+              <div
+                onMouseUp={() => {
+                  const selected = window.getSelection()?.toString().trim();
+                  if (selected && selected.length >= 5) {
+                    setHighlightQuote(selected.slice(0, 500));
+                  }
+                }}
+                title="Dica: selecione qualquer trecho com o mouse para preencher automaticamente um novo Destaque abaixo"
+                className="rounded-2xl bg-inset border border-border-subtle p-5 max-h-96 overflow-y-auto text-xs sm:text-sm text-fg whitespace-pre-wrap leading-relaxed font-sans"
+              >
                 {fullText || "Sem conteúdo textual extraído."}
               </div>
             </div>

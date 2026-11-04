@@ -2,6 +2,7 @@ export type ThemeMode = "light" | "sepia" | "dark" | "nord";
 
 export type WorkspaceTabId =
   | "library"
+  | "graph"
   | "assistant"
   | "organization"
   | "jobs"

@@ -6,6 +6,8 @@ import { CheckCircle2, AlertCircle } from "lucide-react";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { CaptureBarModal } from "@/components/workspace/CaptureBarModal";
 import { LibraryTab } from "@/components/workspace/LibraryTab";
+import { KnowledgeGraphTab } from "@/components/workspace/KnowledgeGraphTab";
+import { CommandPaletteModal } from "@/components/workspace/CommandPaletteModal";
 import { ItemDetailDrawer } from "@/components/workspace/ItemDetailDrawer";
 import {
   AssistantTab,
@@ -47,6 +49,18 @@ export default function PlatformWorkspaceClient({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<WorkspaceTabId>("library");
   const [showCaptureForm, setShowCaptureForm] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
 
   // Toast feedback
   const [feedback, setFeedback] = useState<{
@@ -431,6 +445,7 @@ export default function PlatformWorkspaceClient({
         onSelectTab={setActiveTab}
         showCaptureForm={showCaptureForm}
         onToggleCaptureForm={() => setShowCaptureForm(!showCaptureForm)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         pendingJobsCount={queueMetrics?.counts.pending ?? 0}
         onLogout={handleLogout}
       />
@@ -547,6 +562,13 @@ export default function PlatformWorkspaceClient({
           />
         )}
 
+        {activeTab === "graph" && (
+          <KnowledgeGraphTab
+            items={items}
+            onOpenItemDetail={openItemDetail}
+          />
+        )}
+
         {activeTab === "assistant" && (
           <AssistantTab
             question={question}
@@ -628,6 +650,20 @@ export default function PlatformWorkspaceClient({
         onReloadItem={openItemDetail}
         onRefreshLibrary={loadLibrary}
         onFeedback={showToast}
+      />
+
+      {/* Global Command Palette (Ctrl+K / Cmd+K) */}
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        items={items}
+        onSelectTab={setActiveTab}
+        onOpenItemDetail={openItemDetail}
+        onOpenCapture={() => setShowCaptureForm(true)}
+        onAskRagQuestion={(q) => {
+          setQuestion(q);
+          setActiveTab("assistant");
+        }}
       />
     </div>
   );

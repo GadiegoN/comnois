@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0 — 2026-11-04 — Grafo Interativo de Nós do Conhecimento ("Com Nós"), Command Palette Global (`Ctrl+K`) e Seleção Rápida de Destaques
+- Implementada a aba **Grafo de Nós do Conhecimento** (`src/components/workspace/KnowledgeGraphTab.tsx`), renderizando visualmente os itens do acervo como nós em layout radial concêntrico conectados por arestas ponderadas (tags compartilhadas e domínio), com filtro em tempo real, inspeção de vizinhança semântica e abertura direta do documento.
+- Implementado o **Command Palette Global (`Ctrl+K` / `Cmd+K`)** (`src/components/workspace/CommandPaletteModal.tsx`), permitindo navegação instantânea por teclado entre as 7 abas do Workspace, busca rápida de nós por título/`#tag`, troca imediata entre os 4 temas visuais e envio direto de perguntas ao Assistente RAG.
+- Adicionada captura automática de seleção de texto (`onMouseUp`) no leitor de documentos (`src/components/workspace/ItemDetailDrawer.tsx`) para preenchimento instantâneo de novos Destaques (*Highlights*).
+- Completados os controles de sessão, auditoria de segurança, convites RBAC de workspaces e configuração detalhada de provedores de IA (OpenAI/Ollama/Extrativo com barra de orçamento de tokens) em `src/components/workspace/SettingsAndSecurityTab.tsx`.
+
 ## 1.5.0 — 2026-10-28 — Arquitetura Front-End Modular, Design System Multi-Tema (4 Temas) e Landing Page do Produto
 - Refatorado e decomposto o front-end do Workspace em **componentes modulares reutilizáveis** (`src/components/ui/`, `src/components/workspace/`, `src/components/providers/` e `src/types/platform.ts`), separando claramente rotas SSR Server Components (`src/app/page.tsx`, `src/app/welcome/page.tsx`, `src/app/layout.tsx`) de Client Components interativos.
 - Implementado **Design System Semântico com 4 Temas Visuais** em `src/app/globals.css` (integrado ao `@theme` do Tailwind CSS v4) com persistência instantânea via `ThemeProvider` e `ThemeSwitcher`: **Alabaster** (`light`), **Sépia Editorial** (`sepia`), **Obsidian** (`dark`) e **Aurora** (`nord`).
