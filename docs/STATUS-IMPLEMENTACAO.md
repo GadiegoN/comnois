@@ -1,7 +1,7 @@
 # Status da Implementação — Plataforma Inteligente de Conhecimento
 
 **Última atualização:** 2026-11-04  
-**Estado global:** Etapas 1 a 9 concluídas (`v1.8.0`) e verificadas por suíte de 18 testes automatizados ponta a ponta, checagem estrita de tipos (`tsc --noEmit`), migrações Drizzle/PostgreSQL e build de produção (`next build`).
+**Estado global:** Etapas 1 a 9 concluídas (`v1.9.0`) e verificadas por suíte de 19 testes automatizados ponta a ponta, checagem estrita de tipos (`tsc --noEmit`), migrações Drizzle/PostgreSQL e build de produção (`next build`).
 
 ---
 
@@ -57,7 +57,7 @@
   - Suporte nativo a 4 provedores de IA (`ExtractiveLocalProvider`, `OpenAICompatibleProvider`, `GeminiProvider` para `gemini-2.5-flash` / `text-embedding-004` e `OllamaProvider` em `src/server/ai/providers.ts`).
   - Arquitetura Front-End modularizada em primitivas de UI (`src/components/ui/`, incluindo `MarkdownReader.tsx`), módulos de domínio (`src/components/workspace/`, incluindo `KnowledgeGraphTab.tsx` e `CommandPaletteModal.tsx`), **Design System com 4 temas** baseados em tokens CSS (`light`, `sepia`, `dark`, `nord` em `src/app/globals.css`) e **Landing Page de apresentação do produto** (`src/components/landing/LandingPage.tsx` e rota `/welcome`).
   - Benchmark quantitativo automatizado de Pesquisa (Lexical, Semântica e Híbrida RRF) e Assistente RAG (`runSearchAndRagEvaluationBenchmark` em `src/server/search/evaluator.ts` e endpoint `/api/health`), medindo Recall@3, Precision@1, MRR e precisão de citações verificadas.
-  - Suíte de 18 testes automatizados (`tests/platform.test.ts`), verificação estrita de tipos (`pnpm typecheck`) e build de produção (`pnpm build`).
+  - Suíte de 19 testes automatizados (`tests/platform.test.ts`), verificação estrita de tipos (`pnpm typecheck`) e build de produção (`pnpm build`).
 
 ---
 

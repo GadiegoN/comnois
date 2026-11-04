@@ -11,13 +11,18 @@ import {
   updateItem,
 } from "@/server/services/items";
 import { createCollection, listUserCollections } from "@/server/services/organization";
-import { findRelatedItems, searchLibrary } from "@/server/search";
+import {
+  buildKnowledgeGraph,
+  findRelatedItems,
+  searchLibrary,
+} from "@/server/search";
 import { askKnowledgeAssistant } from "@/server/ai/assistant";
 import { getSystemHealthAndBackupIntegrity } from "@/server/services/observability";
 import { runSearchAndRagEvaluationBenchmark } from "@/server/search/evaluator";
 import { handleMcpJsonRpcRequest, JsonRpcRequest } from "@/server/mcp";
 import {
   exportLibraryAsCsv,
+  exportLibraryAsMarkdownVault,
   exportLibraryAsNetscapeHtml,
   exportUserLibrary,
 } from "@/server/services/portability";
@@ -283,7 +288,15 @@ export async function runCliCommand(argv: string[]): Promise<string> {
     if (fmt === "csv") {
       return exportLibraryAsCsv(bundle);
     }
+    if (fmt === "markdown" || fmt === "md") {
+      return exportLibraryAsMarkdownVault(bundle);
+    }
     return JSON.stringify(bundle, null, 2);
+  }
+
+  if (command === "graph") {
+    const graph = await buildKnowledgeGraph(userId);
+    return JSON.stringify(graph, null, 2);
   }
 
   if (command === "health") {

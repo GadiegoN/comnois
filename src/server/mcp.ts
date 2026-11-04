@@ -1,4 +1,8 @@
-import { searchLibrary, findRelatedItems } from "@/server/search";
+import {
+  searchLibrary,
+  findRelatedItems,
+  buildKnowledgeGraph,
+} from "@/server/search";
 import { askKnowledgeAssistant } from "@/server/ai/assistant";
 import { createLinkItem, createNoteItem } from "@/server/services/items";
 
@@ -121,6 +125,24 @@ export const MCP_TOOLS_CATALOG = [
         },
       },
       required: ["url"],
+    },
+  },
+  {
+    name: "comnois_knowledge_graph",
+    description:
+      "Retorna a topologia do Grafo de Nós do Conhecimento (nós, centralidade, arestas vetoriais, tags compartilhadas e [[WikiLinks]] explícitos).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        maxNodes: {
+          type: "number",
+          description: "Limite máximo de nós no grafo (padrão: 45).",
+        },
+        minSimilarity: {
+          type: "number",
+          description: "Limiar mínimo de similaridade (padrão: 0.35).",
+        },
+      },
     },
   },
 ];
@@ -304,6 +326,29 @@ export async function handleMcpJsonRpcRequest(
                   null,
                   2
                 ),
+              },
+            ],
+          },
+        };
+      }
+
+      if (toolName === "comnois_knowledge_graph") {
+        const maxNodes =
+          typeof args.maxNodes === "number" ? args.maxNodes : 45;
+        const minSimilarity =
+          typeof args.minSimilarity === "number" ? args.minSimilarity : 0.35;
+        const graph = await buildKnowledgeGraph(ownerId, {
+          maxNodes,
+          minSimilarity,
+        });
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(graph, null, 2),
               },
             ],
           },

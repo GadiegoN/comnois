@@ -126,7 +126,7 @@ export function PortabilityTab({
           Exporte todos os seus itens, notas, coleções, tags, highlights e metadados em formatos abertos e padronizados.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
           <a
             href="/api/portability?format=json"
             download="comnois-export.json"
@@ -135,6 +135,19 @@ export function PortabilityTab({
             <span className="text-xs font-bold text-fg">JSON Completo</span>
             <span className="text-[11px] text-fg-muted mt-1">
               Itens, Tags, Coleções e Destaques
+            </span>
+          </a>
+
+          <a
+            href="/api/portability?format=markdown"
+            download="comnois-vault.md"
+            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-brand-soft/30 hover:bg-brand-soft/60 border border-brand/30 text-center transition"
+          >
+            <span className="text-xs font-bold text-brand-text">
+              Vault Markdown (.md)
+            </span>
+            <span className="text-[11px] text-fg-muted mt-1">
+              Obsidian / Logseq & Índice [[WikiLinks]]
             </span>
           </a>
 

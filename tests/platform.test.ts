@@ -91,6 +91,7 @@ import {
   previewImportLibrary,
   exportLibraryAsNetscapeHtml,
   exportLibraryAsCsv,
+  exportLibraryAsMarkdownVault,
 } from "@/server/services/portability";
 import { parseSearchQueryDsl } from "@/server/search/query-dsl";
 import { createRssFeed, syncRssFeed, listUserRssFeeds } from "@/server/services/feeds";
@@ -1500,6 +1501,78 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
     expect(
       updatedSourceDetail.backlinks.some((b) => b.id === synthesis.item.id)
     ).toBe(true);
+  });
+
+  // ==========================================================================
+  // 19. EXPORTAÇÃO DE VAULT MARKDOWN (`[[WIKILINKS]]`), SMART COLLECTIONS COM
+  //     QUERY DSL E FERRAMENTA MCP / CLI DE GRAFO DE CONHECIMENTO
+  // ==========================================================================
+  it("exporta a biblioteca completa como Vault Markdown/Obsidian, avalia Smart Collections via Query DSL e expõe o Grafo de Nós via MCP e CLI", async () => {
+    const { user } = await registerUser({
+      email: "vault-user@example.com",
+      displayName: "Vault Architect",
+      password: "Password123",
+    });
+
+    const ghItem = await createLinkItem(user.id, {
+      url: "https://github.com/pgvector/pgvector",
+      title: "pgvector — Open-Source Vector Similarity Search for Postgres",
+      tags: ["vetores", "postgres"],
+    });
+    await updateItem(user.id, ghItem.item.id, { isFavorite: true });
+
+    await createNoteItem(user.id, {
+      title: "Índice HNSW com [[pgvector — Open-Source Vector Similarity Search for Postgres]]",
+      content:
+        "Notas sobre indexação vetorial em PostgreSQL usando [[pgvector — Open-Source Vector Similarity Search for Postgres]].",
+      tags: ["vetores"],
+    });
+
+    // 1. Smart Collection evaluated dynamically via Query DSL expression
+    const dslSmartCol = await createCollection({
+      ownerId: user.id,
+      name: "Favoritos Vetoriais no GitHub",
+      type: "smart",
+      smartRules: {
+        query: "is:fav site:github.com #vetores",
+      },
+    });
+
+    const cols = await listUserCollections(user.id);
+    const matchedCol = cols.find((c) => c.id === dslSmartCol.id);
+    expect(matchedCol?.itemCount).toBe(1);
+
+    // 2. Full Library Export as Obsidian / Markdown Knowledge Vault
+    const bundle = await exportUserLibrary(user.id);
+    const mdVault = exportLibraryAsMarkdownVault(bundle);
+    expect(mdVault).toContain("# Comnois — Vault de Nós do Conhecimento");
+    expect(mdVault).toContain("## Índice de Nós (`[[WikiLinks]]`)");
+    expect(mdVault).toContain(
+      "- [[pgvector — Open-Source Vector Similarity Search for Postgres]] (link)"
+    );
+
+    // 3. MCP `comnois_knowledge_graph` tool & CLI `graph` command
+    const mcpGraphRes = await handleMcpJsonRpcRequest(user.id, {
+      jsonrpc: "2.0",
+      id: 99,
+      method: "tools/call",
+      params: {
+        name: "comnois_knowledge_graph",
+        arguments: { maxNodes: 20, minSimilarity: 0.2 },
+      },
+    });
+    const mcpGraphJson = JSON.parse(
+      (mcpGraphRes?.result as { content: Array<{ text: string }> }).content[0]
+        .text
+    ) as { nodes: unknown[]; edges: unknown[] };
+    expect(mcpGraphJson.nodes).toHaveLength(2);
+    expect(mcpGraphJson.edges.length).toBeGreaterThanOrEqual(1);
+
+    const cliGraphRaw = await runCliCommand(["graph"]);
+    const cliGraphParsed = JSON.parse(cliGraphRaw) as {
+      stats: { totalNodes: number };
+    };
+    expect(cliGraphParsed.stats.totalNodes).toBeGreaterThanOrEqual(1);
   });
 });
 

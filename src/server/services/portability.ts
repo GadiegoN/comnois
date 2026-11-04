@@ -254,6 +254,81 @@ export function exportLibraryAsCsv(bundle: PortableExportBundle): string {
 }
 
 /**
+ * Exports the entire user library as a structured Obsidian / Markdown Knowledge Vault
+ * preserving YAML metadata, `[[WikiLinks]]` node index, tags, highlights and content.
+ */
+export function exportLibraryAsMarkdownVault(bundle: PortableExportBundle): string {
+  const lines: string[] = [
+    "---",
+    `vault_format: "${bundle.formatVersion}-markdown-vault"`,
+    `exported_at: "${bundle.exportedAt}"`,
+    `total_nodes: ${bundle.manifest.totalItemsExported}`,
+    `total_collections: ${bundle.manifest.totalCollectionsExported}`,
+    "---",
+    "",
+    "# Comnois — Vault de Nós do Conhecimento",
+    "",
+    "## Índice de Nós (`[[WikiLinks]]`)",
+    "",
+  ];
+
+  for (const item of bundle.items) {
+    const tagStr =
+      item.tags.length > 0
+        ? ` — ${item.tags.map((t) => `#${t}`).join(" ")}`
+        : "";
+    lines.push(`- [[${item.title}]] (${item.type})${tagStr}`);
+  }
+
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+
+  for (const item of bundle.items) {
+    lines.push(`## [[${item.title}]]`);
+    lines.push("");
+    lines.push(`- **ID:** \`${item.externalId}\``);
+    lines.push(`- **Tipo:** \`${item.type}\``);
+    if (item.originalUrl) {
+      lines.push(`- **URL Original:** ${item.originalUrl}`);
+    }
+    if (item.tags.length > 0) {
+      lines.push(`- **Tags:** ${item.tags.map((t) => `#${t}`).join(", ")}`);
+    }
+    if (item.collections.length > 0) {
+      lines.push(`- **Coleções:** ${item.collections.join(", ")}`);
+    }
+    lines.push("");
+
+    if (item.summary) {
+      lines.push(`> **Resumo:** ${item.summary}`);
+      lines.push("");
+    }
+
+    if (item.highlights.length > 0) {
+      lines.push("### Destaques");
+      for (const hl of item.highlights) {
+        lines.push(`- "${hl.quote}"${hl.note ? ` (*${hl.note}*)` : ""}`);
+      }
+      lines.push("");
+    }
+
+    const body = item.noteText || item.extractedText;
+    if (body) {
+      lines.push("### Conteúdo");
+      lines.push("");
+      lines.push(body);
+      lines.push("");
+    }
+
+    lines.push("---");
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Converte arquivos HTML de favoritos no padrão Netscape (Chrome, Firefox, Safari, Edge, Raindrop, Pocket, Karakeep)
  * para o formato de pacote de importação estruturado da plataforma.
  */

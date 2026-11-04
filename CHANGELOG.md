@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.0 — 2026-11-04 — Exportador de Vault Markdown/Obsidian, Smart Collections via Query DSL e Grafo via MCP & CLI
+- Implementado o **Exportador de Vault Markdown / Obsidian** (`exportLibraryAsMarkdownVault` em `src/server/services/portability.ts`, endpoint `GET /api/portability?format=markdown`, comando `pnpm cli export markdown` e cartão em `src/components/workspace/PortabilityTab.tsx`), exportando a biblioteca inteira como um Vault estruturado com metadados YAML, índice completo de `[[WikiLinks]]`, tags, destaques e conteúdo.
+- Expandidas as **Coleções Inteligentes (*Smart Collections*)** (`evaluateSmartCollectionItemIds` em `src/server/services/organization.ts`) para avaliar expressões completas da **Query DSL** (`is:fav`, `type:...`, `site:...`, `#tag`, texto livre) e adicionado seletor de **Coleção Pai (`parentId`)** na criação de coleções hierárquicas em `src/components/workspace/OrganizationTab.tsx`.
+- Adicionada a ferramenta **`comnois_knowledge_graph`** ao servidor **Model Context Protocol (MCP — JSON-RPC 2.0)** (`src/server/mcp.ts`) e o comando **`pnpm cli graph`** na CLI oficial (`src/cli.ts`), permitindo que agentes externos e operadores consultem a topologia completa do Grafo de Nós.
+- Expandida a suíte de testes de integração (`tests/platform.test.ts`) para **19 cenários ponta a ponta**.
+
 ## 1.8.0 — 2026-11-04 — Links Bidirecionais entre Nós (`[[WikiLinks]]` & Backlinks) e Síntese Permanente de Respostas RAG em Nós
 - Implementada a resolução bidirecional de **`[[WikiLinks]]` e Backlinks Automáticos** (`extractWikiLinks` e `resolveNodeLinksAndBacklinks` em `src/server/search/index.ts`, integrados a `getItemDetail` e `exportSingleItemAsMarkdown` em `src/server/services/items.ts`), permitindo referenciar outros nós com `[[Título do Nó]]` e inspecionar todos os nós que citam o documento atual com snippet de contexto.
 - Integrados os links explícitos `[[WikiLinks]]` ao **Motor de Grafo de Conhecimento** (`buildKnowledgeGraph`), promovendo referências diretas entre nós a arestas de afinidade máxima (`similarityScore = 1.0`, `isExplicitWikiLink = true`).

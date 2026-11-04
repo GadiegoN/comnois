@@ -62,6 +62,7 @@ export function OrganizationTab({
   // Collection state
   const [colName, setColName] = useState("");
   const [colDesc, setColDesc] = useState("");
+  const [parentColId, setParentColId] = useState("");
   const [isSmart, setIsSmart] = useState(false);
   const [smartQuery, setSmartQuery] = useState("");
 
@@ -89,6 +90,7 @@ export function OrganizationTab({
         body: JSON.stringify({
           name: colName.trim(),
           description: colDesc.trim() || undefined,
+          parentId: parentColId || null,
           type: isSmart ? "smart" : "manual",
           smartRules: isSmart ? { query: smartQuery.trim() } : undefined,
         }),
@@ -99,6 +101,7 @@ export function OrganizationTab({
       }
       setColName("");
       setColDesc("");
+      setParentColId("");
       setSmartQuery("");
       onFeedback("Coleção criada com sucesso!");
       await onRefreshAll();
@@ -264,7 +267,7 @@ export function OrganizationTab({
         </div>
 
         <form onSubmit={handleCreateCollection} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Input
               label="Nome da coleção"
               required
@@ -278,6 +281,18 @@ export function OrganizationTab({
               value={colDesc}
               onChange={(e) => setColDesc(e.target.value)}
             />
+            <Select
+              label="Coleção Pai (Hierarquia)"
+              value={parentColId}
+              onChange={(e) => setParentColId(e.target.value)}
+            >
+              <option value="">Raiz (Sem pai)</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-fg-secondary">
@@ -319,16 +334,23 @@ export function OrganizationTab({
               className="flex items-center justify-between p-2.5 rounded-xl bg-elevated/60 border border-border-subtle"
             >
               <div>
-                <div className="text-xs font-semibold text-fg flex items-center gap-1.5">
-                  {c.isSmartCollection && (
+                <div className="text-xs font-semibold text-fg flex flex-wrap items-center gap-1.5">
+                  {(c.isSmartCollection || c.type === "smart") && (
                     <Zap className="w-3.5 h-3.5 text-amber-500" />
                   )}
                   <span>{c.name}</span>
+                  {c.parentId && (
+                    <Badge variant="purple">
+                      ↳{" "}
+                      {collections.find((p) => p.id === c.parentId)?.name ||
+                        "Subcoleção"}
+                    </Badge>
+                  )}
                   <Badge variant="default">{c.itemCount ?? 0} itens</Badge>
                 </div>
-                {c.smartQuery && (
+                {(c.smartQuery || c.smartRules?.query) && (
                   <div className="text-[11px] font-mono text-brand-text">
-                    Query: {c.smartQuery}
+                    Query: {c.smartQuery || c.smartRules?.query}
                   </div>
                 )}
               </div>

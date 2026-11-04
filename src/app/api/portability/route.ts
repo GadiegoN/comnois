@@ -3,6 +3,7 @@ import { requireCurrentUser, handleApiError } from "@/server/http";
 import {
   DuplicatePolicy,
   exportLibraryAsCsv,
+  exportLibraryAsMarkdownVault,
   exportLibraryAsNetscapeHtml,
   exportUserLibrary,
   importUserLibrary,
@@ -34,6 +35,17 @@ export async function GET(req: NextRequest) {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
+
+    if (format === "markdown" || format === "md") {
+      const md = exportLibraryAsMarkdownVault(bundle);
+      return new NextResponse(md, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
           "Cache-Control": "private, no-store",
         },
       });

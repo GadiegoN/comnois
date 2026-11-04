@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { generateId } from "@/lib/security/crypto";
 import { normalizeSearchText } from "@/server/search/chunker";
+import { parseSearchQueryDsl } from "@/server/search/query-dsl";
 import { assertItemAccess } from "./items";
 import {
   ConflictError,
@@ -119,6 +120,7 @@ export async function confirmOrRejectItemTag(input: {
 // ============================================================================
 
 export interface SmartCollectionRules {
+  query?: string;
   itemType?: "link" | "note" | "file" | "image";
   domainContains?: string;
   titleContains?: string;
@@ -138,9 +140,21 @@ export async function evaluateSmartCollectionItemIds(
 
   if (userItems.length === 0) return [];
 
+  // Merge Query DSL if `rules.query` is provided
+  const parsedDsl = rules.query ? parseSearchQueryDsl(rules.query) : null;
+  const effectiveItemType = rules.itemType ?? parsedDsl?.type;
+  const effectiveIsFavorite =
+    rules.isFavorite !== undefined ? rules.isFavorite : parsedDsl?.isFavorite;
+  const effectiveDomain = rules.domainContains ?? parsedDsl?.domainContains;
+  const effectiveTitle =
+    rules.titleContains ??
+    (parsedDsl?.cleanQuery ? parsedDsl.cleanQuery : undefined);
+  const effectiveTag =
+    rules.tagName ?? (parsedDsl?.tagNames?.[0] ? parsedDsl.tagNames[0] : undefined);
+
   let allowedByTag: Set<string> | null = null;
-  if (rules.tagName && rules.tagName.trim()) {
-    const normTag = normalizeSearchText(rules.tagName.trim());
+  if (effectiveTag && effectiveTag.trim()) {
+    const normTag = normalizeSearchText(effectiveTag.trim());
     const itemIds = userItems.map((i) => i.id);
     const rows = await db
       .select({ itemId: itemTags.itemId, normalizedName: tags.normalizedName })
@@ -155,22 +169,25 @@ export async function evaluateSmartCollectionItemIds(
 
   return userItems
     .filter((item) => {
-      if (rules.itemType && item.type !== rules.itemType) return false;
-      if (rules.isFavorite !== undefined && item.isFavorite !== rules.isFavorite) {
-        return false;
-      }
+      if (effectiveItemType && item.type !== effectiveItemType) return false;
       if (
-        rules.domainContains &&
-        !(item.domain ?? "")
-          .toLowerCase()
-          .includes(rules.domainContains.toLowerCase())
+        effectiveIsFavorite !== undefined &&
+        item.isFavorite !== effectiveIsFavorite
       ) {
         return false;
       }
       if (
-        rules.titleContains &&
-        !normalizeSearchText(item.title).includes(
-          normalizeSearchText(rules.titleContains)
+        effectiveDomain &&
+        !(item.domain ?? "")
+          .toLowerCase()
+          .includes(effectiveDomain.toLowerCase())
+      ) {
+        return false;
+      }
+      if (
+        effectiveTitle &&
+        !normalizeSearchText(`${item.title} ${item.summary ?? ""}`).includes(
+          normalizeSearchText(effectiveTitle)
         )
       ) {
         return false;
