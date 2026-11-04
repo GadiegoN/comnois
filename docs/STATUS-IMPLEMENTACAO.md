@@ -51,10 +51,12 @@
   - Webhooks de saída assinados com **HMAC-SHA256** (`X-Comnois-Signature: t=...,v1=...`), proteção anti-SSRF no cadastro e disparo, e histórico de entregas auditável (`webhooks` e `webhook_deliveries` em `src/server/services/webhooks.ts`).
   - Tokens de API com escopo granular (`read` vs `write`) validados em todas as rotas (`requireCurrentUser(requiredScope)`), regras de automação na captura e gestão de workspaces colaborativos com convites expiráveis, papéis (`owner`, `admin`, `member`) e transferência de propriedade.
   - Extensão de navegador Chrome/Edge Manifest V3 (`extensions/chrome-capture/`) e artefatos de self-hosting em produção (`Dockerfile` multi-stage e `docker-compose.yml` com PostgreSQL 16, Web e Worker).
-- **Etapa 9 — Qualidade, Observabilidade, Diagnóstico de Backup e Benchmark RAG:**
-  - Diagnóstico de saúde e verificação de integridade física de blobs no storage (`getSystemHealthAndBackupIntegrity` em `src/server/services/observability.ts`).
+- **Etapa 9 — Qualidade, Observabilidade, Diagnóstico de Backup, Benchmark RAG, MCP e Arquitetura Front-End Multi-Tema (`v1.4.0`–`v1.5.0`):**
+  - Diagnóstico de saúde e verificação de integridade física de blobs no storage (`getSystemHealthAndBackupIntegrity` em `src/server/services/observability.ts`) e diagnóstico de cobertura/drift do índice vetorial (`getEmbeddingIndexDiagnostics` em `src/server/search/index.ts`).
+  - Histórico persistente e auditável de conversas RAG (`assistant_conversations` e `assistant_messages` na migração `drizzle/0004_worried_rumiko_fujikawa.sql`), descoberta automática de conexões semânticas (`findRelatedItems`), snapshots offline imutáveis em Markdown (`createOfflineSnapshotForItem`) e servidor **Model Context Protocol (MCP — JSON-RPC 2.0)** (`src/server/mcp.ts`).
+  - Arquitetura Front-End modularizada em primitivas de UI (`src/components/ui/`), módulos de domínio (`src/components/workspace/`), **Design System com 4 temas** baseados em tokens CSS (`light`, `sepia`, `dark`, `nord` em `src/app/globals.css`) e **Landing Page de apresentação do produto** (`src/components/landing/LandingPage.tsx` e rota `/welcome`).
   - Benchmark quantitativo automatizado de Pesquisa (Lexical, Semântica e Híbrida RRF) e Assistente RAG (`runSearchAndRagEvaluationBenchmark` em `src/server/search/evaluator.ts` e endpoint `/api/health`), medindo Recall@3, Precision@1, MRR e precisão de citações verificadas.
-  - Suíte de testes automatizados (`tests/platform.test.ts`), verificação estrita de tipos (`pnpm typecheck`) e build de produção (`pnpm build`).
+  - Suíte de 16 testes automatizados (`tests/platform.test.ts`), verificação estrita de tipos (`pnpm typecheck`) e build de produção (`pnpm build`).
 
 ---
 
@@ -62,9 +64,9 @@
 
 | Comando | Finalidade | Resultado |
 |---|---|---|
-| `pnpm db:generate` | Geração de migrações SQL versionadas (24 tabelas PostgreSQL) | **PASS** (`0000`, `0001`, `0002` e `0003_curly_lionheart.sql`) |
+| `pnpm db:generate` | Geração de migrações SQL versionadas (26 tabelas PostgreSQL) | **PASS** (`0000` a `0004_worried_rumiko_fujikawa.sql`) |
 | `pnpm db:migrate` | Aplicação das migrações SQL no banco PostgreSQL | **PASS** |
-| `pnpm test` | Suíte de 15 testes cobrindo auth, RBAC, IDOR, LGPD erasure, SSRF, XSS, links, uploads, S3 SigV4, Smart Collections, prevenção de ciclos hierárquicos, tags de IA, Webhooks HMAC, Feeds RSS/Atom, Query DSL, CLI oficial, Netscape HTML/CSV Dry-Run, workers, busca RRF, RAG, portabilidade, integridade de storage e benchmark quantitativo | **PASS** (15/15 testes aprovados) |
+| `pnpm test` | Suíte de 16 testes cobrindo auth, RBAC, IDOR, LGPD erasure, SSRF, XSS, links, uploads, S3 SigV4, Smart Collections, prevenção de ciclos hierárquicos, tags de IA, Webhooks HMAC, Feeds RSS/Atom, Query DSL, CLI oficial, Netscape HTML/CSV Dry-Run, workers, busca RRF, RAG com histórico e retenção, conexões semânticas, snapshots offline `.md`, diagnóstico de drift vetorial, servidor MCP, portabilidade, integridade de storage e benchmark quantitativo | **PASS** (16/16 testes aprovados) |
 | `pnpm typecheck` | Verificação estrita TypeScript (`tsc --noEmit`) | **PASS** (0 erros) |
 | `pnpm build` | Build otimizado de produção Next.js 15 App Router | **PASS** |
 

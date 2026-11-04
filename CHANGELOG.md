@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 — 2026-10-28 — Arquitetura Front-End Modular, Design System Multi-Tema (4 Temas) e Landing Page do Produto
+- Refatorado e decomposto o front-end do Workspace em **componentes modulares reutilizáveis** (`src/components/ui/`, `src/components/workspace/`, `src/components/providers/` e `src/types/platform.ts`), separando claramente rotas SSR Server Components (`src/app/page.tsx`, `src/app/welcome/page.tsx`, `src/app/layout.tsx`) de Client Components interativos.
+- Implementado **Design System Semântico com 4 Temas Visuais** em `src/app/globals.css` (integrado ao `@theme` do Tailwind CSS v4) com persistência instantânea via `ThemeProvider` e `ThemeSwitcher`: **Alabaster** (`light`), **Sépia Editorial** (`sepia`), **Obsidian** (`dark`) e **Aurora** (`nord`).
+- Criada **Landing Page de Apresentação do Produto** (`src/components/landing/LandingPage.tsx`, rota `/welcome` e `/` para visitantes não autenticados) com vitrine interativa em tempo real (`LandingShowcaseClient.tsx`) demonstrando o Assistente RAG Verificável, a Busca Híbrida RRF + Query DSL e a integração CLI / MCP / Snapshots Offline.
+- Adicionado controle de vivacidade (`SELECT 1`), limpeza automática de locks órfãos (`postmaster.pid`) e auto-recuperação resiliente para o banco PostgreSQL 16 embarcado (PGlite WASM) em `src/db/index.ts`, além de botão de importação rápida dos 28 documentos oficiais da arquitetura na barra da Biblioteca (`action: "ingestDocs"` em `/api/jobs`).
+
 ## 1.4.0 — 2026-10-28 — Histórico RAG com Retenção, Conexões Semânticas, Snapshots Offline, Diagnóstico Vetorial e Servidor MCP
 - Implementado **Histórico Auditável de Conversas do Assistente RAG & Controle de Retenção de Privacidade** (`assistant_conversations` e `assistant_messages` na migração `drizzle/0004_worried_rumiko_fujikawa.sql`, `listAssistantConversations`, `getAssistantConversationMessages`, `deleteAssistantConversation` e `purgeAssistantHistory` em `src/server/ai/assistant.ts`).
 - Implementada **Descoberta Semântica de Itens Relacionados ("Conexões do Conhecimento")** (`findRelatedItems` em `src/server/search/index.ts`), combinando similaridade de cosseno entre embeddings de chunks, interseção de etiquetas e domínio com isolamento estrito por usuário.

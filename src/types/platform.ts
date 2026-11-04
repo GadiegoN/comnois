@@ -267,4 +267,11 @@ export interface WorkspacesSettingsData {
     createdAt: string;
     expiresAt: string;
   }>;
+  auditLogs?: Array<{
+    id: string;
+    action: string;
+    targetType: string | null;
+    targetId: string | null;
+    createdAt: string;
+  }>;
 }
