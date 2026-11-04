@@ -3,7 +3,9 @@ import { requireCurrentUser, handleApiError } from "@/server/http";
 import {
   acceptWorkspaceInvite,
   createWorkspace,
+  deleteWorkspace,
   inviteWorkspaceMember,
+  leaveWorkspace,
   listUserWorkspaces,
   removeWorkspaceMember,
   transferWorkspaceOwnership,
@@ -109,6 +111,27 @@ export async function POST(req: NextRequest) {
         newOwnerUserId: body.newOwnerUserId ?? "",
       });
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "leaveWorkspace") {
+      const result = await leaveWorkspace({
+        userId: user.id,
+        workspaceId: body.workspaceId ?? "",
+        retainPersonalItems: body.retainPersonalItems !== false,
+      });
+      return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (body.action === "deleteWorkspace") {
+      const result = await deleteWorkspace({
+        ownerId: user.id,
+        workspaceId: body.workspaceId ?? "",
+        itemRetentionPolicy:
+          body.itemRetentionPolicy === "delete_all"
+            ? "delete_all"
+            : "retain_to_personal",
+      });
+      return NextResponse.json({ ok: true, ...result });
     }
 
     if (body.action === "createApiToken") {

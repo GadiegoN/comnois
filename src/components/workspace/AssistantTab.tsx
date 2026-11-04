@@ -50,6 +50,7 @@ interface AssistantTabProps {
   onPurgeOldConversations: () => Promise<void>;
   onOpenCitedItem: (itemId: string) => void;
   onSynthesisSaved?: (itemId: string) => Promise<void> | void;
+  activeWorkspaceId?: string;
 }
 
 const EXAMPLE_QUESTIONS = [
@@ -77,6 +78,7 @@ export function AssistantTab({
   onPurgeOldConversations,
   onOpenCitedItem,
   onSynthesisSaved,
+  activeWorkspaceId,
 }: AssistantTabProps) {
   const [savingNode, setSavingNode] = useState(false);
 
@@ -89,6 +91,7 @@ export function AssistantTab({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "saveAsNote",
+          workspaceId: activeWorkspaceId || null,
           question: answer.question || question,
           answer: answer.answer,
           directEvidenceSummary: answer.directEvidenceSummary,

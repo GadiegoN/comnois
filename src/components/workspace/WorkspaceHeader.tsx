@@ -15,6 +15,7 @@ import {
   LogOut,
   Globe,
   Command,
+  Users,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
 import { Button } from "@/components/ui/Button";
@@ -30,6 +31,9 @@ interface WorkspaceHeaderProps {
   onOpenCommandPalette?: () => void;
   pendingJobsCount: number;
   onLogout: () => void;
+  workspaces?: Array<{ id: string; name: string; role: string }>;
+  activeWorkspaceId?: string;
+  onSelectWorkspaceId?: (id: string) => void;
 }
 
 const NAV_TABS: Array<{
@@ -83,6 +87,9 @@ export function WorkspaceHeader({
   onOpenCommandPalette,
   pendingJobsCount,
   onLogout,
+  workspaces = [],
+  activeWorkspaceId = "",
+  onSelectWorkspaceId,
 }: WorkspaceHeaderProps) {
   return (
     <header className="sticky top-0 z-30 backdrop-blur-md bg-surface/90 border-b border-border-subtle">
@@ -98,7 +105,7 @@ export function WorkspaceHeader({
                 <h1 className="text-base font-bold text-fg tracking-tight">
                   Comnois
                 </h1>
-                <Badge variant="brand">Workspace v2.0</Badge>
+                <Badge variant="brand">Workspace v2.1</Badge>
               </div>
               <p className="text-[11px] text-fg-muted hidden sm:block">
                 Pesquisa híbrida RRF & RAG com citações verificáveis
@@ -107,6 +114,25 @@ export function WorkspaceHeader({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {onSelectWorkspaceId && (
+              <div className="inline-flex items-center gap-1.5 rounded-xl bg-inset border border-border-subtle px-2.5 py-1 text-xs">
+                <Users className="w-3.5 h-3.5 text-brand-text shrink-0" />
+                <select
+                  aria-label="Selecionar contexto de Workspace"
+                  value={activeWorkspaceId}
+                  onChange={(e) => onSelectWorkspaceId(e.target.value)}
+                  className="bg-transparent text-xs font-medium text-fg focus:outline-none cursor-pointer"
+                >
+                  <option value="">Acervo Pessoal</option>
+                  {workspaces.map((ws) => (
+                    <option key={ws.id} value={ws.id}>
+                      {ws.name} ({ws.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {onOpenCommandPalette && (
               <button
                 type="button"

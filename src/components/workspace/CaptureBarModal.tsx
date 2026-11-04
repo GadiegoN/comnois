@@ -9,6 +9,7 @@ import type { CollectionInfo } from "@/types/platform";
 
 interface CaptureBarModalProps {
   collections: CollectionInfo[];
+  activeWorkspaceId?: string;
   onClose: () => void;
   onCreated: () => Promise<void>;
   onFeedback: (msg: string, isError?: boolean) => void;
@@ -16,6 +17,7 @@ interface CaptureBarModalProps {
 
 export function CaptureBarModal({
   collections,
+  activeWorkspaceId,
   onClose,
   onCreated,
   onFeedback,
@@ -49,6 +51,7 @@ export function CaptureBarModal({
         if (noteContent.trim()) formData.append("summary", noteContent.trim());
         if (parsedTags.length > 0) formData.append("tags", parsedTags.join(","));
         if (collectionId) formData.append("collectionId", collectionId);
+        if (activeWorkspaceId) formData.append("workspaceId", activeWorkspaceId);
 
         const res = await fetch("/api/items", {
           method: "POST",
@@ -68,6 +71,7 @@ export function CaptureBarModal({
                 summary: noteContent.trim() || undefined,
                 tags: parsedTags,
                 collectionId: collectionId || undefined,
+                workspaceId: activeWorkspaceId || undefined,
               }
             : {
                 type: "note",
@@ -76,6 +80,7 @@ export function CaptureBarModal({
                 noteText: noteContent.trim(),
                 tags: parsedTags,
                 collectionId: collectionId || undefined,
+                workspaceId: activeWorkspaceId || undefined,
               };
 
         const res = await fetch("/api/items", {

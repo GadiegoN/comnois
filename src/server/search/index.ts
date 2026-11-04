@@ -1196,11 +1196,18 @@ export async function buildKnowledgeGraph(
   options?: {
     maxNodes?: number;
     minSimilarity?: number;
+    workspaceId?: string | null;
   }
 ): Promise<KnowledgeGraphPayload> {
   const db = await getDb();
   const maxNodes = Math.min(100, Math.max(5, options?.maxNodes ?? 45));
   const minSimilarity = options?.minSimilarity ?? 0.35;
+
+  let scopeCondition = eq(items.ownerId, ownerId);
+  if (options?.workspaceId) {
+    await requireWorkspaceRole(ownerId, options.workspaceId, "member");
+    scopeCondition = eq(items.workspaceId, options.workspaceId);
+  }
 
   const userItems = await db
     .select({
@@ -1217,7 +1224,7 @@ export async function buildKnowledgeGraph(
     })
     .from(items)
     .leftJoin(itemContents, eq(itemContents.itemId, items.id))
-    .where(and(eq(items.ownerId, ownerId), eq(items.isArchived, false)))
+    .where(and(scopeCondition, eq(items.isArchived, false)))
     .orderBy(desc(items.isFavorite), desc(items.createdAt))
     .limit(maxNodes);
 
@@ -1271,7 +1278,11 @@ export async function buildKnowledgeGraph(
       vectorJson: embeddings.vectorJson,
     })
     .from(embeddings)
-    .where(and(eq(embeddings.ownerId, ownerId), inArray(embeddings.itemId, itemIds)));
+    .where(
+      options?.workspaceId
+        ? inArray(embeddings.itemId, itemIds)
+        : and(eq(embeddings.ownerId, ownerId), inArray(embeddings.itemId, itemIds))
+    );
 
   const vectorsByItem = new Map<string, number[][]>();
   for (const r of embRows) {

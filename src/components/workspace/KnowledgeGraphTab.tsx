@@ -41,11 +41,13 @@ interface GraphEdge {
 
 interface KnowledgeGraphTabProps {
   items: SearchItem[];
+  activeWorkspaceId?: string;
   onOpenItemDetail: (id: string) => void;
 }
 
 export function KnowledgeGraphTab({
   items,
+  activeWorkspaceId,
   onOpenItemDetail,
 }: KnowledgeGraphTabProps) {
   const [filterText, setFilterText] = useState("");
@@ -66,8 +68,11 @@ export function KnowledgeGraphTab({
   const fetchServerGraph = useCallback(async () => {
     setLoadingGraph(true);
     try {
+      const wsQuery = activeWorkspaceId
+        ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}`
+        : "";
       const res = await fetch(
-        `/api/graph?maxNodes=45&minSimilarity=${minSimilarity}`
+        `/api/graph?maxNodes=45&minSimilarity=${minSimilarity}${wsQuery}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -76,7 +81,7 @@ export function KnowledgeGraphTab({
     } finally {
       setLoadingGraph(false);
     }
-  }, [minSimilarity]);
+  }, [minSimilarity, activeWorkspaceId]);
 
   useEffect(() => {
     void fetchServerGraph();

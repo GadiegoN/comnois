@@ -8,10 +8,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const maxNodes = Number(searchParams.get("maxNodes") ?? "45");
     const minSimilarity = Number(searchParams.get("minSimilarity") ?? "0.35");
+    const workspaceId = searchParams.get("workspaceId") || undefined;
 
     const graph = await buildKnowledgeGraph(user.id, {
       maxNodes: Number.isFinite(maxNodes) ? maxNodes : 45,
       minSimilarity: Number.isFinite(minSimilarity) ? minSimilarity : 0.35,
+      workspaceId,
     });
 
     return NextResponse.json(graph);

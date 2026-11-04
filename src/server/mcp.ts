@@ -142,6 +142,10 @@ export const MCP_TOOLS_CATALOG = [
           type: "number",
           description: "Limiar mínimo de similaridade (padrão: 0.35).",
         },
+        workspaceId: {
+          type: "string",
+          description: "ID opcional do workspace colaborativo para escopo do grafo.",
+        },
       },
     },
   },
@@ -176,7 +180,7 @@ export async function handleMcpJsonRpcRequest(
         },
         serverInfo: {
           name: "comnois-knowledge-mcp",
-          version: "2.0.0",
+          version: "2.1.0",
         },
       },
     };
@@ -337,9 +341,14 @@ export async function handleMcpJsonRpcRequest(
           typeof args.maxNodes === "number" ? args.maxNodes : 45;
         const minSimilarity =
           typeof args.minSimilarity === "number" ? args.minSimilarity : 0.35;
+        const workspaceId =
+          typeof args.workspaceId === "string" && args.workspaceId
+            ? args.workspaceId
+            : undefined;
         const graph = await buildKnowledgeGraph(ownerId, {
           maxNodes,
           minSimilarity,
+          workspaceId,
         });
         return {
           jsonrpc: "2.0",

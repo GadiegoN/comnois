@@ -19,6 +19,8 @@ import {
   acceptWorkspaceInvite,
   removeWorkspaceMember,
   transferWorkspaceOwnership,
+  leaveWorkspace,
+  deleteWorkspace,
   requireWorkspaceRole,
 } from "@/server/services/workspaces";
 import {
@@ -1307,7 +1309,7 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
       method: "initialize",
     });
     expect(mcpInit?.result).toMatchObject({
-      serverInfo: { name: "comnois-knowledge-mcp", version: "2.0.0" },
+      serverInfo: { name: "comnois-knowledge-mcp", version: "2.1.0" },
     });
 
     const mcpTools = await handleMcpJsonRpcRequest(alice.id, {
@@ -1697,6 +1699,125 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
     });
     expect(scopedRag.insufficientEvidence).toBe(false);
     expect(scopedRag.citations[0].itemId).toBe(noteViaUiPayload.item.id);
+  });
+
+  // ==========================================================================
+  // 21. GRAFO MULTI-WORKSPACE E CICLO DE VIDA COMPLETO DE WORKSPACES (`leaveWorkspace` & `deleteWorkspace`)
+  // ==========================================================================
+  it("isola o Grafo Semântico por Workspace Colaborativo e executa leaveWorkspace e deleteWorkspace preservando os itens autorais nos acervos pessoais", async () => {
+    const { user: owner } = await registerUser({
+      email: "ws-owner-v21@example.com",
+      displayName: "Owner v2.1",
+      password: "Password123",
+    });
+    const { user: member } = await registerUser({
+      email: "ws-member-v21@example.com",
+      displayName: "Member v2.1",
+      password: "Password123",
+    });
+    const { user: outsider } = await registerUser({
+      email: "ws-outsider-v21@example.com",
+      displayName: "Outsider v2.1",
+      password: "Password123",
+    });
+
+    const ws = await createWorkspace({
+      ownerId: owner.id,
+      name: "Laboratório de Pesquisa Colaborativa",
+    });
+
+    const invite = await inviteWorkspaceMember({
+      actorId: owner.id,
+      workspaceId: ws.id,
+      invitedEmail: member.email,
+      role: "member",
+    });
+
+    await acceptWorkspaceInvite({
+      userId: member.id,
+      inviteToken: invite.inviteToken,
+    });
+
+    // Owner creates a personal item (outside workspace) and a collaborative item (inside workspace)
+    await createNoteItem(owner.id, {
+      title: "Nota Pessoal Privada do Owner",
+      content: "Esta nota não pertence ao workspace colaborativo.",
+      tags: ["privado"],
+    });
+
+    const ownerWsNote = await createNoteItem(owner.id, {
+      title: "Arquitetura do Workspace Colaborativo",
+      content:
+        "Especificação compartilhada conectada via [[Protocolo de Consenso da Equipe]].",
+      tags: ["equipe", "consenso"],
+      workspaceId: ws.id,
+    });
+
+    // Member creates a collaborative item inside the workspace
+    const memberWsNote = await createNoteItem(member.id, {
+      title: "Protocolo de Consenso da Equipe",
+      content:
+        "Detalhamento técnico criado pelo membro dentro do workspace colaborativo.",
+      tags: ["equipe", "consenso"],
+      workspaceId: ws.id,
+    });
+
+    // 1. Multi-Workspace Knowledge Graph (`buildKnowledgeGraph` with `workspaceId`)
+    // Both owner and member see the 2 collaborative nodes and their explicit [[WikiLink]] edge, excluding owner's personal note
+    const wsGraphForMember = await buildKnowledgeGraph(member.id, {
+      workspaceId: ws.id,
+      minSimilarity: 0.2,
+    });
+    expect(wsGraphForMember.nodes).toHaveLength(2);
+    expect(
+      wsGraphForMember.nodes.some((n) => n.title.includes("Pessoal Privada"))
+    ).toBe(false);
+    expect(wsGraphForMember.edges.length).toBeGreaterThanOrEqual(1);
+    expect(wsGraphForMember.edges[0].isExplicitWikiLink).toBe(true);
+
+    // Outsider cannot access the workspace's knowledge graph
+    await expect(
+      buildKnowledgeGraph(outsider.id, { workspaceId: ws.id })
+    ).rejects.toThrow(/Acesso negado ao workspace solicitado/i);
+
+    // 2. Owner cannot leave workspace without transferring ownership first
+    await expect(
+      leaveWorkspace({ userId: owner.id, workspaceId: ws.id })
+    ).rejects.toThrow(/transferir a propriedade/i);
+
+    // 3. Member leaves workspace (`leaveWorkspace`): member's authored item is detached (`workspaceId = null`) and preserved in member's personal library
+    const leaveRes = await leaveWorkspace({
+      userId: member.id,
+      workspaceId: ws.id,
+    });
+    expect(leaveRes.retainedItemsCount).toBe(1);
+
+    await expect(
+      requireWorkspaceRole(member.id, ws.id, "member")
+    ).rejects.toThrow(/Acesso negado ao workspace solicitado/i);
+
+    const memberPersonalSearch = await searchLibrary({
+      ownerId: member.id,
+      query: "Protocolo de Consenso da Equipe",
+    });
+    expect(memberPersonalSearch.total).toBe(1);
+    expect(memberPersonalSearch.results[0].id).toBe(memberWsNote.item.id);
+
+    // 4. Owner deletes workspace with `retain_to_personal`: owner's collaborative item is preserved in personal library
+    const delRes = await deleteWorkspace({
+      ownerId: owner.id,
+      workspaceId: ws.id,
+      itemRetentionPolicy: "retain_to_personal",
+    });
+    expect(delRes.deletedWorkspaceId).toBe(ws.id);
+    expect(delRes.retainedItemsCount).toBe(1);
+
+    const ownerPersonalSearch = await searchLibrary({
+      ownerId: owner.id,
+      query: "Arquitetura do Workspace Colaborativo",
+    });
+    expect(ownerPersonalSearch.total).toBeGreaterThanOrEqual(1);
+    expect(ownerPersonalSearch.results[0].id).toBe(ownerWsNote.item.id);
   });
 });
 

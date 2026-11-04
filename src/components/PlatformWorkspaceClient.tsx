@@ -48,6 +48,7 @@ export default function PlatformWorkspaceClient({
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<WorkspaceTabId>("library");
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
   const [showCaptureForm, setShowCaptureForm] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
@@ -156,6 +157,7 @@ export default function PlatformWorkspaceClient({
       if (selectedCollectionId) params.set("collectionId", selectedCollectionId);
       if (onlyFavorites) params.set("isFavorite", "true");
       if (includeArchived) params.set("includeArchived", "true");
+      if (activeWorkspaceId) params.set("workspaceId", activeWorkspaceId);
 
       const res = await fetch(`/api/items?${params.toString()}`);
       if (res.ok) {
@@ -177,6 +179,7 @@ export default function PlatformWorkspaceClient({
     selectedTag,
     onlyFavorites,
     includeArchived,
+    activeWorkspaceId,
   ]);
 
   const loadOrganizationAndWorkspaceData = useCallback(async () => {
@@ -213,12 +216,15 @@ export default function PlatformWorkspaceClient({
   }, []);
 
   const loadConversations = useCallback(async () => {
-    const res = await fetch("/api/assistant");
+    const wsQuery = activeWorkspaceId
+      ? `?workspaceId=${encodeURIComponent(activeWorkspaceId)}`
+      : "";
+    const res = await fetch(`/api/assistant${wsQuery}`);
     if (res.ok) {
       const d = await res.json();
       setConversations(d.conversations || []);
     }
-  }, []);
+  }, [activeWorkspaceId]);
 
   const loadSettings = useCallback(async () => {
     const aiRes = await fetch("/api/settings/ai");
@@ -332,6 +338,7 @@ export default function PlatformWorkspaceClient({
           conversationId: selectedConversationId || undefined,
           collectionId: scopeCollectionId || undefined,
           tag: scopeTag || undefined,
+          workspaceId: activeWorkspaceId || null,
         }),
       });
       const data = await res.json();
@@ -460,6 +467,20 @@ export default function PlatformWorkspaceClient({
     router.refresh();
   }
 
+  const workspaceOptions = (
+    workspacesData?.workspaces ||
+    (workspacesData?.owned || []).map((w) => ({
+      id: w.id,
+      workspaceId: w.id,
+      name: w.name,
+      role: "owner",
+    }))
+  ).map((w, idx) => ({
+    id: w.id || w.workspaceId || `ws-${idx}`,
+    name: w.name,
+    role: w.role || "owner",
+  }));
+
   return (
     <div className="min-h-screen bg-canvas text-fg flex flex-col">
       <WorkspaceHeader
@@ -471,6 +492,13 @@ export default function PlatformWorkspaceClient({
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         pendingJobsCount={queueMetrics?.counts.pending ?? 0}
         onLogout={handleLogout}
+        workspaces={workspaceOptions}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspaceId={(wsId) => {
+          setActiveWorkspaceId(wsId);
+          setSelectedConversationId(null);
+          setAnswer(null);
+        }}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
@@ -506,6 +534,7 @@ export default function PlatformWorkspaceClient({
         {showCaptureForm && (
           <CaptureBarModal
             collections={collections}
+            activeWorkspaceId={activeWorkspaceId}
             onClose={() => setShowCaptureForm(false)}
             onCreated={async () => {
               await loadLibrary();
@@ -588,6 +617,7 @@ export default function PlatformWorkspaceClient({
         {activeTab === "graph" && (
           <KnowledgeGraphTab
             items={items}
+            activeWorkspaceId={activeWorkspaceId}
             onOpenItemDetail={openItemDetail}
           />
         )}
@@ -611,6 +641,7 @@ export default function PlatformWorkspaceClient({
             onDeleteConversation={handleDeleteConversation}
             onPurgeOldConversations={handlePurgeOldConversations}
             onOpenCitedItem={openItemDetail}
+            activeWorkspaceId={activeWorkspaceId}
             onSynthesisSaved={async (itemId) => {
               showToast(
                 "Síntese salva como Nó Permanente com [[WikiLinks]] para as fontes citadas!"
@@ -662,6 +693,12 @@ export default function PlatformWorkspaceClient({
             workspacesData={workspacesData}
             apiTokens={apiTokens}
             webhooks={webhooks}
+            activeWorkspaceId={activeWorkspaceId}
+            onSelectWorkspaceId={(wsId) => {
+              setActiveWorkspaceId(wsId);
+              setSelectedConversationId(null);
+              setAnswer(null);
+            }}
             onRefreshSettings={async () => {
               await loadSettings();
               await loadOrganizationAndWorkspaceData();

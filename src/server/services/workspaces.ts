@@ -1,6 +1,14 @@
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/db";
-import { workspaces, workspaceMembers, auditLogs } from "@/db/schema";
+import {
+  workspaces,
+  workspaceMembers,
+  auditLogs,
+  items,
+  collections,
+  tags,
+  assistantConversations,
+} from "@/db/schema";
 import { generateId, generateSecureToken, sha256Hex } from "@/lib/security/crypto";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 
@@ -270,4 +278,156 @@ export async function listUserWorkspaces(userId: string) {
 
   return memberships;
 }
+
+/**
+ * Permite que um membro ou administrador saia voluntariamente de um workspace
+ * preservando seus itens pessoais sem deixar o workspace órfão de proprietário.
+ */
+export async function leaveWorkspace(input: {
+  userId: string;
+  workspaceId: string;
+  retainPersonalItems?: boolean;
+}): Promise<{ retainedItemsCount: number }> {
+  const role = await getMemberRoleInWorkspace(input.userId, input.workspaceId);
+  if (!role) {
+    throw new ForbiddenError("Você não é um membro ativo deste workspace.");
+  }
+
+  if (role === "owner") {
+    throw new ValidationError(
+      "O proprietário não pode sair do workspace sem antes transferir a propriedade ou excluir o workspace."
+    );
+  }
+
+  const db = await getDb();
+  const now = new Date();
+  let retainedItemsCount = 0;
+
+  if (input.retainPersonalItems !== false) {
+    const authoredItems = await db
+      .select({ id: items.id })
+      .from(items)
+      .where(
+        and(
+          eq(items.workspaceId, input.workspaceId),
+          eq(items.ownerId, input.userId)
+        )
+      );
+    retainedItemsCount = authoredItems.length;
+
+    if (retainedItemsCount > 0) {
+      await db
+        .update(items)
+        .set({ workspaceId: null, updatedAt: now })
+        .where(
+          and(
+            eq(items.workspaceId, input.workspaceId),
+            eq(items.ownerId, input.userId)
+          )
+        );
+    }
+  }
+
+  await db
+    .update(workspaceMembers)
+    .set({ status: "revoked", updatedAt: now })
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, input.workspaceId),
+        eq(workspaceMembers.userId, input.userId)
+      )
+    );
+
+  await db.insert(auditLogs).values({
+    id: generateId("aud"),
+    actorId: input.userId,
+    workspaceId: input.workspaceId,
+    action: "workspace.member_left",
+    targetType: "workspace",
+    targetId: input.workspaceId,
+    metadata: { retainedItemsCount },
+  });
+
+  return { retainedItemsCount };
+}
+
+/**
+ * Exclui um workspace colaborativo mediante confirmação do proprietário (`owner`),
+ * aplicando política explícita de retenção dos dados (`retain_to_personal` por padrão).
+ */
+export async function deleteWorkspace(input: {
+  ownerId: string;
+  workspaceId: string;
+  itemRetentionPolicy?: "retain_to_personal" | "delete_all";
+}): Promise<{
+  deletedWorkspaceId: string;
+  retainedItemsCount: number;
+  deletedItemsCount: number;
+}> {
+  await requireWorkspaceRole(input.ownerId, input.workspaceId, "owner");
+  const db = await getDb();
+  const policy = input.itemRetentionPolicy ?? "retain_to_personal";
+  const now = new Date();
+
+  const wsItems = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(eq(items.workspaceId, input.workspaceId));
+
+  let retainedItemsCount = 0;
+  let deletedItemsCount = 0;
+
+  if (policy === "retain_to_personal") {
+    retainedItemsCount = wsItems.length;
+    await db
+      .update(items)
+      .set({ workspaceId: null, updatedAt: now })
+      .where(eq(items.workspaceId, input.workspaceId));
+    await db
+      .update(collections)
+      .set({ workspaceId: null, updatedAt: now })
+      .where(eq(collections.workspaceId, input.workspaceId));
+    await db
+      .update(tags)
+      .set({ workspaceId: null })
+      .where(eq(tags.workspaceId, input.workspaceId));
+    await db
+      .update(assistantConversations)
+      .set({ workspaceId: null, updatedAt: now })
+      .where(eq(assistantConversations.workspaceId, input.workspaceId));
+  } else {
+    deletedItemsCount = wsItems.length;
+    await db.delete(items).where(eq(items.workspaceId, input.workspaceId));
+    await db
+      .delete(collections)
+      .where(eq(collections.workspaceId, input.workspaceId));
+    await db.delete(tags).where(eq(tags.workspaceId, input.workspaceId));
+  }
+
+  await db.insert(auditLogs).values({
+    id: generateId("aud"),
+    actorId: input.ownerId,
+    workspaceId: null,
+    action: "workspace.deleted",
+    targetType: "workspace",
+    targetId: input.workspaceId,
+    metadata: {
+      policy,
+      retainedItemsCount,
+      deletedItemsCount,
+    },
+  });
+
+  await db
+    .delete(workspaceMembers)
+    .where(eq(workspaceMembers.workspaceId, input.workspaceId));
+  await db.delete(workspaces).where(eq(workspaces.id, input.workspaceId));
+
+  return {
+    deletedWorkspaceId: input.workspaceId,
+    retainedItemsCount,
+    deletedItemsCount,
+  };
+}
+
 

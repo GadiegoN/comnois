@@ -47,6 +47,8 @@ interface SettingsAndSecurityTabProps {
   workspacesData: WorkspacesSettingsData | null;
   apiTokens: ApiTokenItem[];
   webhooks: WebhookItem[];
+  activeWorkspaceId?: string;
+  onSelectWorkspaceId?: (id: string) => void;
   onRefreshSettings: () => Promise<void>;
   onFeedback: (msg: string, isError?: boolean) => void;
   onAccountDeleted: () => void;
@@ -58,6 +60,8 @@ export function SettingsAndSecurityTab({
   workspacesData,
   apiTokens,
   webhooks,
+  activeWorkspaceId = "",
+  onSelectWorkspaceId,
   onRefreshSettings,
   onFeedback,
   onAccountDeleted,
@@ -336,6 +340,65 @@ export function SettingsAndSecurityTab({
     } catch (err) {
       onFeedback(
         err instanceof Error ? err.message : "Erro ao aceitar convite.",
+        true
+      );
+    }
+  }
+
+  async function handleLeaveWorkspace(workspaceId: string) {
+    try {
+      const res = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "leaveWorkspace",
+          workspaceId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Erro ao sair do workspace.");
+      }
+      if (activeWorkspaceId === workspaceId && onSelectWorkspaceId) {
+        onSelectWorkspaceId("");
+      }
+      onFeedback(
+        "Você saiu do workspace. Seus itens autorais foram preservados no seu acervo pessoal."
+      );
+      await onRefreshSettings();
+    } catch (err) {
+      onFeedback(
+        err instanceof Error ? err.message : "Erro ao sair do workspace.",
+        true
+      );
+    }
+  }
+
+  async function handleDeleteWorkspace(workspaceId: string) {
+    try {
+      const res = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deleteWorkspace",
+          workspaceId,
+          itemRetentionPolicy: "retain_to_personal",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Erro ao excluir workspace.");
+      }
+      if (activeWorkspaceId === workspaceId && onSelectWorkspaceId) {
+        onSelectWorkspaceId("");
+      }
+      onFeedback(
+        "Workspace excluído com preservação de todos os itens nos acervos pessoais."
+      );
+      await onRefreshSettings();
+    } catch (err) {
+      onFeedback(
+        err instanceof Error ? err.message : "Erro ao excluir workspace.",
         true
       );
     }
@@ -672,16 +735,61 @@ export function SettingsAndSecurityTab({
 
           {workspaceList.length > 0 && (
             <>
-              <div className="space-y-1.5 max-h-28 overflow-y-auto">
-                {workspaceList.map((ws) => (
-                  <div
-                    key={ws.id}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-elevated/60 border border-border-subtle text-xs"
-                  >
-                    <span className="font-semibold text-fg">{ws.name}</span>
-                    <Badge variant="default">{ws.role}</Badge>
-                  </div>
-                ))}
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {workspaceList.map((ws) => {
+                  const isActiveWs = activeWorkspaceId === ws.id;
+                  return (
+                    <div
+                      key={ws.id}
+                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-elevated/60 border border-border-subtle text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold text-fg truncate">
+                          {ws.name}
+                        </span>
+                        <Badge variant={isActiveWs ? "brand" : "default"}>
+                          {ws.role}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {onSelectWorkspaceId && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSelectWorkspaceId(isActiveWs ? "" : ws.id)
+                            }
+                            className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition cursor-pointer ${
+                              isActiveWs
+                                ? "bg-brand text-white"
+                                : "bg-inset text-fg-secondary hover:text-fg border border-border-subtle"
+                            }`}
+                          >
+                            {isActiveWs ? "Ativo (Sair do Foco)" : "Ativar"}
+                          </button>
+                        )}
+                        {ws.role === "owner" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteWorkspace(ws.id)}
+                            title="Excluir workspace preservando itens no acervo pessoal"
+                            className="text-fg-muted hover:text-red-500 p-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleLeaveWorkspace(ws.id)}
+                            title="Sair do workspace preservando itens autorais"
+                            className="text-fg-muted hover:text-amber-500 p-1 cursor-pointer"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <form

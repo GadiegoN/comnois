@@ -84,9 +84,11 @@ export async function POST(req: NextRequest) {
         .map((t) => t.trim())
         .filter(Boolean);
       const collectionId = (formData.get("collectionId") as string) || undefined;
+      const workspaceId = (formData.get("workspaceId") as string) || undefined;
 
       const created = await createUploadedFileItem({
         ownerId: user.id,
+        workspaceId,
         fileName: file.name,
         declaredMimeType: file.type,
         buffer,
