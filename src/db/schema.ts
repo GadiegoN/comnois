@@ -443,7 +443,9 @@ export const aiProviderConfigs = pgTable(
     ownerId: text("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    provider: text("provider", { enum: ["extractive", "openai", "ollama"] })
+    provider: text("provider", {
+      enum: ["extractive", "openai", "ollama", "gemini"],
+    })
       .notNull()
       .default("extractive"),
     baseUrl: text("base_url"),

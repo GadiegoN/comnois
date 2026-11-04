@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Network,
   Sparkles,
@@ -9,6 +9,7 @@ import {
   Star,
   Tag,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -25,15 +26,17 @@ interface GraphNode {
   x: number;
   y: number;
   degree: number;
+  centralityScore: number;
 }
 
 interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  weight: number;
+  similarityScore: number;
+  vectorSimilarity: number;
   sharedTags: string[];
-  reason: string;
+  connectionReason: string;
 }
 
 interface KnowledgeGraphTabProps {
@@ -46,98 +49,100 @@ export function KnowledgeGraphTab({
   onOpenItemDetail,
 }: KnowledgeGraphTabProps) {
   const [filterText, setFilterText] = useState("");
-  const [minSharedTags, setMinSharedTags] = useState(1);
+  const [minSimilarity, setMinSimilarity] = useState(0.35);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  const [serverGraph, setServerGraph] = useState<{
+    nodes: Array<Omit<GraphNode, "x" | "y">>;
+    edges: GraphEdge[];
+    stats: {
+      totalNodes: number;
+      totalEdges: number;
+      isolatedNodes: number;
+      avgDegree: number;
+    };
+  } | null>(null);
+  const [loadingGraph, setLoadingGraph] = useState(false);
 
-  const { nodes, edges } = useMemo(() => {
-    const filtered = items
-      .filter((it) => {
-        if (!filterText.trim()) return true;
-        const q = filterText.toLowerCase();
-        return (
-          it.title.toLowerCase().includes(q) ||
-          it.tags.some((t) => t.name.toLowerCase().includes(q)) ||
-          (it.domain && it.domain.toLowerCase().includes(q))
-        );
-      })
-      .slice(0, 40);
-
-    const computedEdges: GraphEdge[] = [];
-    const degreeMap = new Map<string, number>();
-
-    for (let i = 0; i < filtered.length; i++) {
-      for (let j = i + 1; j < filtered.length; j++) {
-        const a = filtered[i];
-        const b = filtered[j];
-        const tagsA = new Set(
-          a.tags
-            .map((t) => t.name.toLowerCase())
-            .filter((name) => name !== "documentacao")
-        );
-        const shared = b.tags
-          .map((t) => t.name.toLowerCase())
-          .filter((name) => tagsA.has(name));
-
-        const sameDomain = Boolean(
-          a.domain && b.domain && a.domain === b.domain
-        );
-
-        const weight = shared.length + (sameDomain ? 1 : 0);
-        if (weight >= minSharedTags) {
-          computedEdges.push({
-            id: `${a.id}--${b.id}`,
-            source: a.id,
-            target: b.id,
-            weight,
-            sharedTags: shared,
-            reason:
-              shared.length > 0
-                ? shared.map((t) => `#${t}`).join(", ")
-                : `Domínio: ${a.domain}`,
-          });
-          degreeMap.set(a.id, (degreeMap.get(a.id) ?? 0) + 1);
-          degreeMap.set(b.id, (degreeMap.get(b.id) ?? 0) + 1);
-        }
+  const fetchServerGraph = useCallback(async () => {
+    setLoadingGraph(true);
+    try {
+      const res = await fetch(
+        `/api/graph?maxNodes=45&minSimilarity=${minSimilarity}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setServerGraph(data);
       }
+    } finally {
+      setLoadingGraph(false);
     }
+  }, [minSimilarity]);
 
-    // Concentric radial layout: high-degree hub nodes closer to center, peripheral nodes on outer ring
-    const sorted = [...filtered].sort(
-      (a, b) => (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0)
+  useEffect(() => {
+    void fetchServerGraph();
+  }, [fetchServerGraph, items.length]);
+
+  const { nodes, edges, avgDegree } = useMemo(() => {
+    const rawNodes =
+      serverGraph?.nodes ??
+      items.slice(0, 40).map((it) => ({
+        id: it.id,
+        title: it.title,
+        type: it.type,
+        isFavorite: it.isFavorite,
+        tags: it.tags.map((t) => t.name),
+        domain: it.domain,
+        degree: 0,
+        centralityScore: 0,
+      }));
+
+    const filteredNodes = rawNodes.filter((n) => {
+      if (!filterText.trim()) return true;
+      const q = filterText.toLowerCase();
+      return (
+        n.title.toLowerCase().includes(q) ||
+        n.tags.some((t) => t.toLowerCase().includes(q)) ||
+        (n.domain && n.domain.toLowerCase().includes(q))
+      );
+    });
+
+    const allowedIds = new Set(filteredNodes.map((n) => n.id));
+    const filteredEdges = (serverGraph?.edges ?? []).filter(
+      (e) => allowedIds.has(e.source) && allowedIds.has(e.target)
+    );
+
+    // Concentric radial layout ordered by centrality & degree
+    const sorted = [...filteredNodes].sort(
+      (a, b) => b.centralityScore - a.centralityScore || b.degree - a.degree
     );
 
     const cx = 450;
     const cy = 270;
-    const computedNodes: GraphNode[] = sorted.map((item, idx) => {
-      const degree = degreeMap.get(item.id) ?? 0;
-      const isInnerRing = idx < Math.min(8, Math.ceil(sorted.length / 3));
-      const ringItemsCount = isInnerRing
-        ? Math.min(8, Math.ceil(sorted.length / 3))
-        : Math.max(1, sorted.length - Math.min(8, Math.ceil(sorted.length / 3)));
-      const ringIndex = isInnerRing
-        ? idx
-        : idx - Math.min(8, Math.ceil(sorted.length / 3));
-      const radius =
-        sorted.length <= 1 ? 0 : isInnerRing ? 115 : 220;
-      const angleOffset = isInnerRing ? 0 : Math.PI / ringItemsCount;
+    const innerCapacity = Math.min(8, Math.ceil(sorted.length / 3));
+    const outerCapacity = Math.max(1, sorted.length - innerCapacity);
+
+    const positionedNodes: GraphNode[] = sorted.map((node, idx) => {
+      const isInner = idx < innerCapacity;
+      const ringCount = isInner ? innerCapacity : outerCapacity;
+      const ringIndex = isInner ? idx : idx - innerCapacity;
+      const radius = sorted.length <= 1 ? 0 : isInner ? 115 : 220;
+      const angleOffset = isInner ? 0 : Math.PI / Math.max(1, ringCount);
       const angle =
-        (2 * Math.PI * ringIndex) / Math.max(1, ringItemsCount) + angleOffset;
+        (2 * Math.PI * ringIndex) / Math.max(1, ringCount) + angleOffset;
 
       return {
-        id: item.id,
-        title: item.title,
-        type: item.type,
-        isFavorite: item.isFavorite,
-        tags: item.tags.map((t) => t.name),
-        domain: item.domain,
+        ...node,
         x: Math.round(cx + radius * Math.cos(angle)),
         y: Math.round(cy + radius * Math.sin(angle)),
-        degree,
       };
     });
 
-    return { nodes: computedNodes, edges: computedEdges };
-  }, [items, filterText, minSharedTags]);
+    return {
+      nodes: positionedNodes,
+      edges: filteredEdges,
+      avgDegree: serverGraph?.stats?.avgDegree ?? 0,
+    };
+  }, [serverGraph, items, filterText]);
 
   const nodeById = useMemo(
     () => new Map(nodes.map((n) => [n.id, n])),
@@ -148,21 +153,36 @@ export function KnowledgeGraphTab({
 
   const connectedNeighbors = useMemo(() => {
     if (!focusedNodeId) return [];
-    const list: Array<{ node: GraphNode; reason: string; weight: number }> = [];
+    const list: Array<{
+      node: GraphNode;
+      reason: string;
+      similarityScore: number;
+      vectorSimilarity: number;
+    }> = [];
     for (const edge of edges) {
       if (edge.source === focusedNodeId) {
         const target = nodeById.get(edge.target);
         if (target) {
-          list.push({ node: target, reason: edge.reason, weight: edge.weight });
+          list.push({
+            node: target,
+            reason: edge.connectionReason,
+            similarityScore: edge.similarityScore,
+            vectorSimilarity: edge.vectorSimilarity,
+          });
         }
       } else if (edge.target === focusedNodeId) {
         const source = nodeById.get(edge.source);
         if (source) {
-          list.push({ node: source, reason: edge.reason, weight: edge.weight });
+          list.push({
+            node: source,
+            reason: edge.connectionReason,
+            similarityScore: edge.similarityScore,
+            vectorSimilarity: edge.vectorSimilarity,
+          });
         }
       }
     }
-    return list.sort((a, b) => b.weight - a.weight);
+    return list.sort((a, b) => b.similarityScore - a.similarityScore);
   }, [focusedNodeId, edges, nodeById]);
 
   const connectedNodeIds = useMemo(() => {
@@ -184,15 +204,25 @@ export function KnowledgeGraphTab({
           <div>
             <h2 className="text-base font-bold text-fg flex items-center gap-2">
               <Network className="w-4 h-4 text-brand-text" />
-              Grafo de Nós do Conhecimento (&ldquo;Com Nós&rdquo;)
+              Grafo Semântico de Nós do Conhecimento (&ldquo;Com Nós&rdquo;)
             </h2>
             <p className="text-xs text-fg-secondary">
-              Cada documento do seu acervo é um nó conectado por afinidade temática, tags confirmadas e domínio. Clique em um nó para inspecionar suas conexões.
+              Calculado no servidor combinando similaridade de cosseno entre embeddings vetoriais (65%), interseção de tags confirmadas (30%) e domínio.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="brand">{nodes.length} Nós ativos</Badge>
-            <Badge variant="purple">{edges.length} Conexões</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="brand">{nodes.length} Nós</Badge>
+            <Badge variant="purple">{edges.length} Conexões Semânticas</Badge>
+            <Badge variant="default">Grau médio: {avgDegree}</Badge>
+            <Button
+              size="xs"
+              variant="secondary"
+              disabled={loadingGraph}
+              leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+              onClick={fetchServerGraph}
+            >
+              {loadingGraph ? "Calculando..." : "Recalcular"}
+            </Button>
           </div>
         </div>
 
@@ -209,15 +239,15 @@ export function KnowledgeGraphTab({
           </div>
 
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-fg-secondary">Densidade de Arestas:</span>
+            <span className="text-fg-secondary">Limiar Semântico:</span>
             <select
-              value={minSharedTags}
-              onChange={(e) => setMinSharedTags(Number(e.target.value))}
+              value={minSimilarity}
+              onChange={(e) => setMinSimilarity(Number(e.target.value))}
               className="rounded-xl bg-inset border border-border-subtle px-2.5 py-1.5 text-xs text-fg"
             >
-              <option value={1}>1+ tag/domínio em comum (Completa)</option>
-              <option value={2}>2+ tags em comum (Forte)</option>
-              <option value={3}>3+ tags em comum (Núcleo Estrito)</option>
+              <option value={0.25}>25%+ (Rede Ampla)</option>
+              <option value={0.35}>35%+ (Equilibrado)</option>
+              <option value={0.5}>50%+ (Alta Similaridade Vetorial)</option>
             </select>
             {focusedNodeId && (
               <Button
@@ -242,7 +272,7 @@ export function KnowledgeGraphTab({
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
-                Nó Padrão
+                Nó Documental
               </span>
               <span className="inline-flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
@@ -250,7 +280,7 @@ export function KnowledgeGraphTab({
               </span>
               <span className="inline-flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-                Nó Selecionado
+                Nó em Foco
               </span>
             </div>
             <span>Clique em um nó para focar • Duplo clique para abrir</span>
@@ -289,7 +319,10 @@ export function KnowledgeGraphTab({
                     strokeOpacity={
                       !focusedNodeId ? 0.45 : isHighlighted ? 0.9 : 0.1
                     }
-                    strokeWidth={Math.min(3.5, 1 + edge.weight * 0.6)}
+                    strokeWidth={Math.min(
+                      3.5,
+                      1 + edge.similarityScore * 2.5
+                    )}
                   />
                 );
               })}
@@ -299,7 +332,10 @@ export function KnowledgeGraphTab({
                 const isFocused = focusedNodeId === node.id;
                 const isConnected =
                   !focusedNodeId || connectedNodeIds.has(node.id);
-                const radius = Math.min(20, 10 + Math.sqrt(node.degree) * 2.2);
+                const radius = Math.min(
+                  20,
+                  10 + Math.sqrt(node.degree) * 2.1
+                );
 
                 const fillColor = isFocused
                   ? "#10b981"
@@ -361,22 +397,24 @@ export function KnowledgeGraphTab({
           <Card padding="lg" className="space-y-4">
             {focusedNode ? (
               <>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="brand">
-                        {focusedNode.type.toUpperCase()}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="brand">
+                      {focusedNode.type.toUpperCase()}
+                    </Badge>
+                    <Badge variant="purple">
+                      Centralidade{" "}
+                      {Math.round(focusedNode.centralityScore * 100)}%
+                    </Badge>
+                    {focusedNode.isFavorite && (
+                      <Badge variant="warning">
+                        <Star className="w-3 h-3" /> Favorito
                       </Badge>
-                      {focusedNode.isFavorite && (
-                        <Badge variant="warning">
-                          <Star className="w-3 h-3" /> Favorito
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="text-sm font-bold text-fg leading-snug">
-                      {focusedNode.title}
-                    </h3>
+                    )}
                   </div>
+                  <h3 className="text-sm font-bold text-fg leading-snug">
+                    {focusedNode.title}
+                  </h3>
                 </div>
 
                 {focusedNode.tags.length > 0 && (
@@ -396,35 +434,44 @@ export function KnowledgeGraphTab({
                   onClick={() => onOpenItemDetail(focusedNode.id)}
                   className="w-full"
                 >
-                  Abrir Leitor & Conexões Vetoriais
+                  Abrir Leitor Editorial & Snapshots
                 </Button>
 
                 <div className="pt-3 border-t border-border-subtle space-y-2.5">
                   <div className="text-xs font-bold text-fg flex items-center justify-between">
-                    <span>Nós Conectados ({connectedNeighbors.length})</span>
+                    <span>
+                      Nós Conectados ({connectedNeighbors.length})
+                    </span>
                     <Sparkles className="w-3.5 h-3.5 text-brand-text" />
                   </div>
 
                   {connectedNeighbors.length === 0 ? (
                     <p className="text-xs text-fg-muted">
-                      Nenhuma conexão direta com a densidade atual.
+                      Nenhuma conexão acima do limiar atual.
                     </p>
                   ) : (
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                      {connectedNeighbors.map(({ node, reason }) => (
-                        <div
-                          key={node.id}
-                          onClick={() => setFocusedNodeId(node.id)}
-                          className="p-2.5 rounded-xl bg-elevated/70 hover:bg-elevated border border-border-subtle cursor-pointer transition space-y-1"
-                        >
-                          <div className="text-xs font-semibold text-fg line-clamp-1">
-                            {node.title}
+                      {connectedNeighbors.map(
+                        ({ node, reason, similarityScore }) => (
+                          <div
+                            key={node.id}
+                            onClick={() => setFocusedNodeId(node.id)}
+                            className="p-2.5 rounded-xl bg-elevated/70 hover:bg-elevated border border-border-subtle cursor-pointer transition space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold text-fg line-clamp-1">
+                                {node.title}
+                              </span>
+                              <Badge variant="brand">
+                                {Math.round(similarityScore * 100)}%
+                              </Badge>
+                            </div>
+                            <div className="text-[11px] font-mono text-brand-text">
+                              {reason}
+                            </div>
                           </div>
-                          <div className="text-[11px] font-mono text-brand-text">
-                            Afinidade: {reason}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      )}
                     </div>
                   )}
                 </div>
@@ -438,7 +485,7 @@ export function KnowledgeGraphTab({
                   Inspecione qualquer Nó do Grafo
                 </h3>
                 <p className="text-xs text-fg-secondary leading-relaxed">
-                  Clique em qualquer círculo no grafo ao lado para destacar sua vizinhança semântica, ver as tags compartilhadas e abrir o documento completo.
+                  Clique em qualquer círculo no grafo ao lado para ver o score de similaridade vetorial (cosseno), centralidade na rede e tags compartilhadas.
                 </p>
               </div>
             )}
@@ -448,4 +495,3 @@ export function KnowledgeGraphTab({
     </div>
   );
 }
-

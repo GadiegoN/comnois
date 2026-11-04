@@ -210,7 +210,7 @@ export interface BenchmarkReportData {
 }
 
 export interface AiConfigData {
-  provider?: "extractive" | "openai" | "ollama";
+  provider?: "extractive" | "openai" | "ollama" | "gemini";
   preferredProvider?: string;
   baseUrl?: string | null;
   hasApiKey?: boolean;

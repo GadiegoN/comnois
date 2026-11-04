@@ -49,6 +49,7 @@ import {
   searchLibrary,
   reindexUserLibrary,
   findRelatedItems,
+  buildKnowledgeGraph,
   getEmbeddingIndexDiagnostics,
 } from "@/server/search";
 import { runSearchAndRagEvaluationBenchmark } from "@/server/search/evaluator";
@@ -77,6 +78,8 @@ import {
   updateUserAiConfig,
   getUserAiConfig,
   getUserAiUsageSummary,
+  resolveAiProviderForUser,
+  GeminiProvider,
   AIProviderAdapter,
 } from "@/server/ai/providers";
 import {
@@ -1323,6 +1326,87 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
     ).content[0].text;
     const parsedSearch = JSON.parse(callText) as { total: number };
     expect(parsedSearch.total).toBeGreaterThanOrEqual(1);
+  });
+
+  // ==========================================================================
+  // 17. GRAFO DE NÓS SEMÂNTICO NO SERVIDOR (`buildKnowledgeGraph`) E PROVEDOR GOOGLE GEMINI
+  // ==========================================================================
+  it("constrói o Grafo de Nós Semântico no servidor combinando similaridade vetorial e tags com isolamento multi-tenant e suporta o provedor Google Gemini", async () => {
+    const { user: alice } = await registerUser({
+      email: "alice-graph@example.com",
+      displayName: "Alice Graph",
+      password: "Password123",
+    });
+    const { user: bob } = await registerUser({
+      email: "bob-graph@example.com",
+      displayName: "Bob Graph",
+      password: "Password123",
+    });
+
+    const node1 = await createNoteItem(alice.id, {
+      title: "Grafo de Conhecimento Vetorial e RRF",
+      content:
+        "Cada documento da biblioteca atua como um nó conectado por similaridade de cosseno entre embeddings e etiquetas confirmadas.",
+      tags: ["grafo", "vetores", "arquitetura"],
+    });
+    const node2 = await createNoteItem(alice.id, {
+      title: "Embeddings Semânticos e Centralidade de Nós",
+      content:
+        "A topologia do grafo calcula o grau e a centralidade de cada nó combinando similaridade vetorial de cosseno e etiquetas em comum.",
+      tags: ["grafo", "vetores"],
+    });
+    const node3 = await createNoteItem(alice.id, {
+      title: "Arquitetura de Software e Sistemas Distribuídos",
+      content:
+        "Padrões de resiliência, filas assíncronas com idempotência e isolamento estrito multi-tenant.",
+      tags: ["arquitetura"],
+    });
+
+    await createNoteItem(bob.id, {
+      title: "Nó Privado do Bob sobre Grafos e Vetores",
+      content: "Este item pertence exclusivamente ao Bob e jamais pode aparecer no grafo da Alice.",
+      tags: ["grafo", "vetores", "arquitetura"],
+    });
+
+    const graph = await buildKnowledgeGraph(alice.id, { minSimilarity: 0.15 });
+    expect(graph.nodes).toHaveLength(3);
+    expect(graph.nodes.some((n) => n.title.includes("Privado do Bob"))).toBe(false);
+    expect(graph.edges.length).toBeGreaterThanOrEqual(2);
+
+    const edge12 = graph.edges.find(
+      (e) =>
+        (e.source === node1.item.id && e.target === node2.item.id) ||
+        (e.source === node2.item.id && e.target === node1.item.id)
+    );
+    expect(edge12).toBeDefined();
+    expect(edge12!.sharedTags).toContain("grafo");
+    expect(edge12!.vectorSimilarity).toBeGreaterThan(0);
+
+    // Centrality score and degree are computed on nodes
+    const hubNode = graph.nodes.find((n) => n.id === node1.item.id);
+    expect(hubNode?.degree).toBeGreaterThanOrEqual(2);
+    expect(hubNode?.centralityScore).toBeGreaterThan(0);
+    expect(graph.stats.totalNodes).toBe(3);
+    expect(graph.stats.avgDegree).toBeGreaterThan(0);
+
+    // Verify Google Gemini provider configuration & encrypted API key persistence
+    await updateUserAiConfig(alice.id, {
+      provider: "gemini",
+      apiKey: "AIzaSyTestKeyForGeminiProvider123456",
+      chatModel: "gemini-2.5-flash",
+      embeddingModel: "text-embedding-004",
+      isEnabled: true,
+    });
+
+    const aiCfg = await getUserAiConfig(alice.id);
+    expect(aiCfg.provider).toBe("gemini");
+    expect(aiCfg.hasApiKey).toBe(true);
+    expect(aiCfg.chatModel).toBe("gemini-2.5-flash");
+    expect(aiCfg.embeddingModel).toBe("text-embedding-004");
+
+    const resolvedProvider = await resolveAiProviderForUser(alice.id);
+    expect(resolvedProvider.getCapabilities().provider).toBe("gemini");
+    expect(resolvedProvider).toBeInstanceOf(GeminiProvider);
   });
 });
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.0 — 2026-11-04 — Motor Semântico de Grafo no Servidor (`/api/graph`), Provedor Nativo Google Gemini e Leitor Editorial Markdown
+- Implementado o **Motor Semântico de Grafo de Conhecimento no Servidor** (`buildKnowledgeGraph` em `src/server/search/index.ts` e endpoint `GET /api/graph` em `src/app/api/graph/route.ts`), calculando centroides vetoriais por item, similaridade de cosseno (65%), interseção de etiquetas confirmadas (30%), bônus de domínio, grau do nó e índice de centralidade, consumido em tempo real por `src/components/workspace/KnowledgeGraphTab.tsx` com seletor de limiar semântico (`25%`, `35%`, `50%`).
+- Implementado o **Provedor Nativo Google Gemini (`GeminiProvider`)** em `src/server/ai/providers.ts` (`gemini-2.5-flash` via `:generateContent` e `text-embedding-004` via `:embedContent`), integrado ao esquema (`src/db/schema.ts`) e à interface de configuração (`src/components/workspace/SettingsAndSecurityTab.tsx`).
+- Criado o **Leitor Editorial Estruturado (`src/components/ui/MarkdownReader.tsx`)** integrado ao painel de detalhes (`src/components/workspace/ItemDetailDrawer.tsx`) com alternância entre modo **Editorial** (renderização tipográfica de títulos, blocos de código, citações, listas e seleção instantânea de destaques) e **Texto Bruto**.
+- Expandida a suíte de testes de integração (`tests/platform.test.ts`) para **17 cenários ponta a ponta**, cobrindo o grafo semântico no servidor com isolamento multi-tenant e a configuração criptografada do provedor Google Gemini.
+
 ## 1.6.0 — 2026-11-04 — Grafo Interativo de Nós do Conhecimento ("Com Nós"), Command Palette Global (`Ctrl+K`) e Seleção Rápida de Destaques
 - Implementada a aba **Grafo de Nós do Conhecimento** (`src/components/workspace/KnowledgeGraphTab.tsx`), renderizando visualmente os itens do acervo como nós em layout radial concêntrico conectados por arestas ponderadas (tags compartilhadas e domínio), com filtro em tempo real, inspeção de vizinhança semântica e abertura direta do documento.
 - Implementado o **Command Palette Global (`Ctrl+K` / `Cmd+K`)** (`src/components/workspace/CommandPaletteModal.tsx`), permitindo navegação instantânea por teclado entre as 7 abas do Workspace, busca rápida de nós por título/`#tag`, troca imediata entre os 4 temas visuais e envio direto de perguntas ao Assistente RAG.

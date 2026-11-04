@@ -421,6 +421,9 @@ export function SettingsAndSecurityTab({
               <option value="openai">
                 OpenAI Compatible (GPT-4o-mini / text-embedding-3-small)
               </option>
+              <option value="gemini">
+                Google Gemini (gemini-2.5-flash / text-embedding-004)
+              </option>
             </Select>
 
             {provider !== "extractive" && provider !== "deterministic" && (

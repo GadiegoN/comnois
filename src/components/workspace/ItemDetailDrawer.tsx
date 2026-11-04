@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
+import { MarkdownReader } from "@/components/ui/MarkdownReader";
 import type { ItemDetailData } from "@/types/platform";
 
 interface ItemDetailDrawerProps {
@@ -49,6 +50,7 @@ export function ItemDetailDrawer({
   const [highlightQuote, setHighlightQuote] = useState("");
   const [highlightNote, setHighlightNote] = useState("");
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
+  const [readerMode, setReaderMode] = useState<"editorial" | "raw">("editorial");
 
   const coreItem = detail?.item;
   const fullText =
@@ -361,10 +363,36 @@ export function ItemDetailDrawer({
 
             {/* Full Extracted Text Content */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
-                  Conteúdo Integral Extraído
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
+                    Conteúdo Integral Extraído
+                  </span>
+                  <div className="inline-flex rounded-lg bg-inset p-0.5 border border-border-subtle text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setReaderMode("editorial")}
+                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        readerMode === "editorial"
+                          ? "bg-surface text-brand-text font-semibold shadow-2xs"
+                          : "text-fg-muted hover:text-fg"
+                      }`}
+                    >
+                      Editorial
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReaderMode("raw")}
+                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                        readerMode === "raw"
+                          ? "bg-surface text-brand-text font-semibold shadow-2xs"
+                          : "text-fg-muted hover:text-fg"
+                      }`}
+                    >
+                      Texto Bruto
+                    </button>
+                  </div>
+                </div>
                 <Button
                   size="xs"
                   variant="outline"
@@ -377,18 +405,30 @@ export function ItemDetailDrawer({
                     : "Gerar Snapshot Offline (.md)"}
                 </Button>
               </div>
-              <div
-                onMouseUp={() => {
-                  const selected = window.getSelection()?.toString().trim();
-                  if (selected && selected.length >= 5) {
-                    setHighlightQuote(selected.slice(0, 500));
-                  }
-                }}
-                title="Dica: selecione qualquer trecho com o mouse para preencher automaticamente um novo Destaque abaixo"
-                className="rounded-2xl bg-inset border border-border-subtle p-5 max-h-96 overflow-y-auto text-xs sm:text-sm text-fg whitespace-pre-wrap leading-relaxed font-sans"
-              >
-                {fullText || "Sem conteúdo textual extraído."}
-              </div>
+              {readerMode === "editorial" ? (
+                <MarkdownReader
+                  content={fullText || "Sem conteúdo textual extraído."}
+                  onTextSelect={() => {
+                    const selected = window.getSelection()?.toString().trim();
+                    if (selected && selected.length >= 5) {
+                      setHighlightQuote(selected.slice(0, 500));
+                    }
+                  }}
+                />
+              ) : (
+                <div
+                  onMouseUp={() => {
+                    const selected = window.getSelection()?.toString().trim();
+                    if (selected && selected.length >= 5) {
+                      setHighlightQuote(selected.slice(0, 500));
+                    }
+                  }}
+                  title="Dica: selecione qualquer trecho com o mouse para preencher automaticamente um novo Destaque abaixo"
+                  className="rounded-2xl bg-inset border border-border-subtle p-5 max-h-96 overflow-y-auto text-xs sm:text-sm text-fg whitespace-pre-wrap leading-relaxed font-mono"
+                >
+                  {fullText || "Sem conteúdo textual extraído."}
+                </div>
+              )}
             </div>
 
             {/* Private Assets & Offline Snapshots */}

@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   items,
@@ -1027,5 +1027,249 @@ export async function getEmbeddingIndexDiagnostics(
     recommendation,
   };
 }
+
+export interface KnowledgeGraphNode {
+  id: string;
+  title: string;
+  type: "link" | "note" | "file" | "image";
+  isFavorite: boolean;
+  domain: string | null;
+  tags: string[];
+  degree: number;
+  centralityScore: number;
+}
+
+export interface KnowledgeGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  similarityScore: number;
+  vectorSimilarity: number;
+  sharedTags: string[];
+  connectionReason: string;
+}
+
+export interface KnowledgeGraphPayload {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  stats: {
+    totalNodes: number;
+    totalEdges: number;
+    isolatedNodes: number;
+    avgDegree: number;
+  };
+}
+
+export async function buildKnowledgeGraph(
+  ownerId: string,
+  options?: {
+    maxNodes?: number;
+    minSimilarity?: number;
+  }
+): Promise<KnowledgeGraphPayload> {
+  const db = await getDb();
+  const maxNodes = Math.min(100, Math.max(5, options?.maxNodes ?? 45));
+  const minSimilarity = options?.minSimilarity ?? 0.35;
+
+  const userItems = await db
+    .select({
+      id: items.id,
+      title: items.title,
+      type: items.type,
+      isFavorite: items.isFavorite,
+      isArchived: items.isArchived,
+      domain: items.domain,
+      createdAt: items.createdAt,
+    })
+    .from(items)
+    .where(and(eq(items.ownerId, ownerId), eq(items.isArchived, false)))
+    .orderBy(desc(items.isFavorite), desc(items.createdAt))
+    .limit(maxNodes);
+
+  if (userItems.length === 0) {
+    return {
+      nodes: [],
+      edges: [],
+      stats: { totalNodes: 0, totalEdges: 0, isolatedNodes: 0, avgDegree: 0 },
+    };
+  }
+
+  const itemIds = userItems.map((i) => i.id);
+
+  // Load confirmed tags for these items
+  const tagRows = await db
+    .select({
+      itemId: itemTags.itemId,
+      tagName: tags.name,
+      isConfirmed: itemTags.isConfirmed,
+    })
+    .from(itemTags)
+    .innerJoin(tags, eq(itemTags.tagId, tags.id))
+    .where(inArray(itemTags.itemId, itemIds));
+
+  const tagsByItem = new Map<string, string[]>();
+  for (const r of tagRows) {
+    if (!r.isConfirmed) continue;
+    const list = tagsByItem.get(r.itemId) ?? [];
+    if (!list.includes(r.tagName)) {
+      list.push(r.tagName);
+    }
+    tagsByItem.set(r.itemId, list);
+  }
+
+  // Load embeddings and compute average centroid vector per item
+  const embRows = await db
+    .select({
+      itemId: embeddings.itemId,
+      vectorJson: embeddings.vectorJson,
+    })
+    .from(embeddings)
+    .where(and(eq(embeddings.ownerId, ownerId), inArray(embeddings.itemId, itemIds)));
+
+  const vectorsByItem = new Map<string, number[][]>();
+  for (const r of embRows) {
+    if (Array.isArray(r.vectorJson) && r.vectorJson.length > 0) {
+      const list = vectorsByItem.get(r.itemId) ?? [];
+      list.push(r.vectorJson);
+      vectorsByItem.set(r.itemId, list);
+    }
+  }
+
+  const centroidByItem = new Map<string, number[]>();
+  for (const [itemId, vecs] of vectorsByItem.entries()) {
+    const dim = vecs[0].length;
+    const avg = new Array<number>(dim).fill(0);
+    let count = 0;
+    for (const v of vecs) {
+      if (v.length !== dim) continue;
+      count++;
+      for (let d = 0; d < dim; d++) {
+        avg[d] += v[d];
+      }
+    }
+    if (count > 0) {
+      const mag = Math.sqrt(avg.reduce((acc, val) => acc + val * val, 0));
+      if (mag > 0) {
+        for (let d = 0; d < dim; d++) {
+          avg[d] = avg[d] / mag;
+        }
+      }
+      centroidByItem.set(itemId, avg);
+    }
+  }
+
+  const edges: KnowledgeGraphEdge[] = [];
+  const degreeByItem = new Map<string, number>();
+  const weightedDegreeByItem = new Map<string, number>();
+
+  for (let i = 0; i < userItems.length; i++) {
+    for (let j = i + 1; j < userItems.length; j++) {
+      const a = userItems[i];
+      const b = userItems[j];
+
+      const vecA = centroidByItem.get(a.id);
+      const vecB = centroidByItem.get(b.id);
+      const vectorSim =
+        vecA && vecB && vecA.length === vecB.length
+          ? Math.max(0, cosineSimilarity(vecA, vecB))
+          : 0;
+
+      const tagsA = (tagsByItem.get(a.id) ?? []).filter(
+        (t) => t.toLowerCase() !== "documentacao"
+      );
+      const tagsB = (tagsByItem.get(b.id) ?? []).filter(
+        (t) => t.toLowerCase() !== "documentacao"
+      );
+      const setA = new Set(tagsA.map((t) => t.toLowerCase()));
+      const sharedTags = tagsB.filter((t) => setA.has(t.toLowerCase()));
+
+      const unionTagsCount = new Set([
+        ...tagsA.map((t) => t.toLowerCase()),
+        ...tagsB.map((t) => t.toLowerCase()),
+      ]).size;
+      const tagSim =
+        unionTagsCount > 0 ? sharedTags.length / unionTagsCount : 0;
+
+      const sameDomain = Boolean(
+        a.domain && b.domain && a.domain === b.domain
+      );
+      const domainBonus = sameDomain ? 0.12 : 0;
+
+      const combinedScore = Number(
+        Math.min(1, vectorSim * 0.65 + tagSim * 0.3 + domainBonus).toFixed(4)
+      );
+
+      if (combinedScore < minSimilarity && sharedTags.length === 0) {
+        continue;
+      }
+
+      const reasons: string[] = [];
+      if (vectorSim >= 0.3) {
+        reasons.push(`Semântica ${Math.round(vectorSim * 100)}%`);
+      }
+      if (sharedTags.length > 0) {
+        reasons.push(sharedTags.map((t) => `#${t}`).join(", "));
+      }
+      if (sameDomain) {
+        reasons.push(`Domínio: ${a.domain}`);
+      }
+
+      edges.push({
+        id: `${a.id}--${b.id}`,
+        source: a.id,
+        target: b.id,
+        similarityScore: combinedScore,
+        vectorSimilarity: Number(vectorSim.toFixed(4)),
+        sharedTags,
+        connectionReason: reasons.join(" • ") || "Afinidade conceitual",
+      });
+
+      degreeByItem.set(a.id, (degreeByItem.get(a.id) ?? 0) + 1);
+      degreeByItem.set(b.id, (degreeByItem.get(b.id) ?? 0) + 1);
+      weightedDegreeByItem.set(
+        a.id,
+        (weightedDegreeByItem.get(a.id) ?? 0) + combinedScore
+      );
+      weightedDegreeByItem.set(
+        b.id,
+        (weightedDegreeByItem.get(b.id) ?? 0) + combinedScore
+      );
+    }
+  }
+
+  const maxWeighted = Math.max(1, ...weightedDegreeByItem.values());
+  const nodes: KnowledgeGraphNode[] = userItems.map((it) => {
+    const degree = degreeByItem.get(it.id) ?? 0;
+    const weighted = weightedDegreeByItem.get(it.id) ?? 0;
+    return {
+      id: it.id,
+      title: it.title,
+      type: it.type as "link" | "note" | "file" | "image",
+      isFavorite: it.isFavorite,
+      domain: it.domain,
+      tags: tagsByItem.get(it.id) ?? [],
+      degree,
+      centralityScore: Number((weighted / maxWeighted).toFixed(3)),
+    };
+  });
+
+  const isolatedNodes = nodes.filter((n) => n.degree === 0).length;
+  const avgDegree =
+    nodes.length > 0
+      ? Number(((edges.length * 2) / nodes.length).toFixed(2))
+      : 0;
+
+  return {
+    nodes,
+    edges,
+    stats: {
+      totalNodes: nodes.length,
+      totalEdges: edges.length,
+      isolatedNodes,
+      avgDegree,
+    },
+  };
+}
+
 
 
