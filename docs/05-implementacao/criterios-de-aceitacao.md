@@ -36,5 +36,11 @@ Uma funcionalidade só está pronta quando todos os critérios aplicáveis forem
 - Decisões importantes registradas.
 - Limitações conhecidas declaradas.
 
+## Sincronização Ponta a Ponta e Checklist Pré-Commit (Regra Obrigatória)
+- **Contratos UI ↔ API ↔ Servidor alinhados:** todo formulário, filtro ou seletor na UI (`src/components/**`) envia exatamente os campos esperados pela rota (`src/app/api/**`) e lê exatamente as propriedades retornadas pelo serviço (`src/server/**`).
+- **Escopos de Segurança verificados:** todas as rotas `GET` aplicam `requireCurrentUser("read")` e todas as rotas `POST`/`PATCH`/`PUT`/`DELETE` aplicam `requireCurrentUser("write")`.
+- **Sincronização de Versão e Superfícies Públicas:** nenhuma release ou feature é commitada sem varredura global (`Select-String` / `grep`) atualizando `package.json`, `LandingPage.tsx`, `LandingShowcaseClient.tsx`, `WorkspaceHeader.tsx`, `src/server/mcp.ts`, `README.md`, `CHANGELOG.md` e `docs/STATUS-IMPLEMENTACAO.md`.
+- **Verificação antes do `git commit`:** `pnpm typecheck` (0 erros) e `pnpm test` (100% aprovados) executados após todas as alterações.
+
 ## Evidência
 A entrega deve listar os comandos executados e seus resultados. Se um comando não foi executado, declarar isso explicitamente.

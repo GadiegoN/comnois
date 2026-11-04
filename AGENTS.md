@@ -24,6 +24,28 @@ Este arquivo orienta agentes de IA que trabalham neste repositório.
 - Não afirme que testes passaram sem executá-los.
 - Atualize a documentação quando uma decisão ou comportamento mudar.
 
+## Regra Obrigatória de Sincronização Ponta a Ponta e Auditoria Pré-Commit
+
+Nenhuma alteração ou nova versão pode ser commitada (`git commit`) sem cumprir **integralmente** o checklist abaixo:
+
+1. **Alinhamento Completo UI ↔ API ↔ Serviço:**
+   - Sempre que alterar ou criar uma função de serviço (`src/server/**`), rota de API (`src/app/api/**`) ou tipo (`src/types/platform.ts`), inspecione e atualize **todos** os componentes React (`src/components/**`) e páginas (`src/app/**`) que consomem ou expõem esse contrato.
+   - Nunca adicione uma opção visual em um `<Select>`, aba ou formulário sem conectar o respectivo handler (`onSubmit`, `fetch`, payload e leitura dos campos exatos da resposta) até o banco de dados.
+2. **Segurança e Escopo em Rotas de API:**
+   - Toda rota de leitura (`GET`) deve exigir `requireCurrentUser("read")` (salvo endpoints explicitamente públicos).
+   - Toda rota de mutação (`POST`, `PATCH`, `PUT`, `DELETE`) deve exigir `requireCurrentUser("write")` e validar a propriedade do recurso no servidor (`assertItemAccess`, `requireWorkspaceRole`).
+3. **Sincronização de Versão, Landing Page e Metadados em Releases:**
+   - Antes de qualquer commit de nova versão ou funcionalidade, execute uma busca global no repositório (`Select-String` / `grep`) e sincronize obrigatoriamente:
+     - `package.json`
+     - `src/components/landing/LandingPage.tsx` (badges de versão, métricas, pilares e tabela comparativa)
+     - `src/components/landing/LandingShowcaseClient.tsx` (abas de preview e comandos CLI/MCP)
+     - `src/components/workspace/WorkspaceHeader.tsx` (badge de versão do workspace)
+     - `src/server/mcp.ts` (`serverInfo.version` e lista de tools)
+     - `src/cli.ts` e `extensions/chrome-capture/manifest.json`
+     - `README.md`, `CHANGELOG.md` e `docs/STATUS-IMPLEMENTACAO.md` (incluindo a tabela de resultados e contagem de suítes de testes).
+4. **Validação Executável Obrigatória Antes do Commit:**
+   - Execute `pnpm typecheck` (`0` erros) e `pnpm test` (`100%` dos testes passando) antes de qualquer `git commit`.
+
 ## Ao concluir uma tarefa
 
 Informe de forma objetiva:

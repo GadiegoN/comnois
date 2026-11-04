@@ -12,6 +12,7 @@
 8. **Custos são parte do produto.** Chamadas de IA, OCR e downloads precisam de limites, estimativas ou controles.
 9. **Acessibilidade e responsividade.** Fluxos principais devem funcionar por teclado e em telas pequenas.
 10. **Sem dependências invisíveis.** Recursos que precisam de worker, serviço de busca ou provedor devem indicar quando esse serviço está indisponível.
+11. **Sincronização ponta a ponta obrigatória.** Nenhuma alteração de backend, contrato de API, componente de UI ou versão pode ser entregue ou commitada de forma parcial; toda mudança deve atualizar simultaneamente todas as páginas, componentes, rotas, CLI, MCP, testes e documentação afetados.
 
 ## Regras globais
 
@@ -28,3 +29,5 @@
 - A exportação deve indicar falhas ou itens não incluídos; não pode anunciar sucesso completo se houve perda.
 - Logs não devem armazenar conteúdo integral, credenciais ou tokens por padrão.
 - Alterações de esquema precisam de migrações revisáveis e caminho de recuperação.
+- Toda rota de API deve validar explicitamente o escopo do token (`requireCurrentUser("read")` para leituras e `requireCurrentUser("write")` para mutações).
+- Qualquer mudança em serviços, contratos de payload/resposta ou versão da plataforma exige auditoria prévia em todos os componentes (`src/components/**`), páginas (`LandingPage.tsx`, `PlatformWorkspaceClient.tsx`, etc.), servidor MCP (`src/server/mcp.ts`), CLI (`src/cli.ts`) e documentação (`README.md`, `CHANGELOG.md`, `docs/STATUS-IMPLEMENTACAO.md`) antes do commit.

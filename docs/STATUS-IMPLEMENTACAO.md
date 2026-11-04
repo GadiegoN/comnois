@@ -81,7 +81,16 @@
 
 ---
 
-## 4. Próxima Unidade Funcional (Evolução Futura)
+## 4. Governança e Regra de Sincronização Ponta a Ponta
+
+Qualquer evolução futura no projeto segue obrigatoriamente a **Regra de Sincronização Ponta a Ponta e Auditoria Pré-Commit** formalizada em:
+- `AGENTS.md` (regra ativa carregada automaticamente por agentes de IA no workspace)
+- `docs/00-visao-geral/principios-e-regras.md` (Princípio #11 e Regras Globais)
+- `docs/05-implementacao/criterios-de-aceitacao.md` (Checklist Pré-Commit obrigatório)
+
+---
+
+## 5. Próxima Unidade Funcional (Evolução Futura)
 
 - Extensão de navegador dedicada consumindo a API `/api/items` autenticada por token `cmn_...`.
 - Armazenamento de objetos remoto S3/R2 em ambiente cloud gerenciado.
