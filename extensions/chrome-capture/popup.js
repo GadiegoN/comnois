@@ -1,8 +1,10 @@
 document.addEventListener("DOMContentLoaded", async () => {
   const endpointInput = document.getElementById("endpoint");
   const tokenInput = document.getElementById("token");
+  const captureTypeSelect = document.getElementById("captureType");
   const urlInput = document.getElementById("url");
   const titleInput = document.getElementById("title");
+  const noteTextInput = document.getElementById("noteText");
   const tagsInput = document.getElementById("tags");
   const saveBtn = document.getElementById("saveBtn");
   const statusBox = document.getElementById("statusBox");
@@ -27,8 +29,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveBtn.addEventListener("click", async () => {
     const baseUrl = (endpointInput.value || "http://localhost:3000").replace(/\/+$/, "");
     const token = (tokenInput.value || "").trim();
+    const captureType = captureTypeSelect?.value || "link";
     const targetUrl = (urlInput.value || "").trim();
     const title = (titleInput.value || "").trim();
+    const noteText = (noteTextInput?.value || "").trim();
     const tags = (tagsInput.value || "")
       .split(",")
       .map((t) => t.trim())
@@ -49,18 +53,31 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     saveBtn.disabled = true;
     try {
+      const payload =
+        captureType === "note"
+          ? {
+              type: "note",
+              title: title || "Nota Capturada pelo Navegador",
+              content:
+                noteText ||
+                `Referência capturada de ${targetUrl}`,
+              tags,
+            }
+          : {
+              type: "link",
+              url: targetUrl,
+              title: title || undefined,
+              summary: noteText || undefined,
+              tags,
+            };
+
       const res = await fetch(`${baseUrl}/api/items`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          type: "link",
-          url: targetUrl,
-          title: title || undefined,
-          tags,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();

@@ -76,16 +76,25 @@
     <label for="token">Token de API (cmn_...)</label>
     <input id="token" type="password" placeholder="cmn_..." />
 
+    <label for="captureType">Modo de Captura</label>
+    <select id="captureType" style="width:100%;padding:7px 9px;border-radius:6px;border:1px solid #1e293b;background:#0f172a;color:#f8fafc;font-size:12px;">
+      <option value="link">Link da Página (Extração Assíncrona)</option>
+      <option value="note">Nota / Trecho Selecionado com [[WikiLinks]]</option>
+    </select>
+
     <label for="url">URL da Aba Atual</label>
     <input id="url" type="url" />
 
-    <label for="title">Título</label>
+    <label for="title">Título do Nó</label>
     <input id="title" type="text" />
+
+    <label for="noteText">Nota / Trecho Selecionado (suporta [[WikiLinks]])</label>
+    <textarea id="noteText" rows="3" placeholder="Trecho ou anotação conectada com [[Outro Nó]]..."></textarea>
 
     <label for="tags">Etiquetas (separadas por vírgula)</label>
     <input id="tags" type="text" placeholder="leitura, pesquisa" />
 
-    <button id="saveBtn" type="button">Salvar na Biblioteca</button>
+    <button id="saveBtn" type="button">Salvar Nó na Biblioteca</button>
     <div id="statusBox" class="status"></div>
 
     <script src="popup.js"></script>

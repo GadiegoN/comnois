@@ -82,6 +82,7 @@ import {
   getUserAiConfig,
   getUserAiUsageSummary,
   resolveAiProviderForUser,
+  extractEmbeddedImageMetadataText,
   GeminiProvider,
   AIProviderAdapter,
 } from "@/server/ai/providers";
@@ -92,6 +93,7 @@ import {
   exportLibraryAsNetscapeHtml,
   exportLibraryAsCsv,
   exportLibraryAsMarkdownVault,
+  parseMarkdownVaultImport,
 } from "@/server/services/portability";
 import { parseSearchQueryDsl } from "@/server/search/query-dsl";
 import { createRssFeed, syncRssFeed, listUserRssFeeds } from "@/server/services/feeds";
@@ -1573,6 +1575,94 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
       stats: { totalNodes: number };
     };
     expect(cliGraphParsed.stats.totalNodes).toBeGreaterThanOrEqual(1);
+  });
+
+  // ==========================================================================
+  // 20. IMPORTADOR DE VAULT MARKDOWN / OBSIDIAN E OCR MULTIMODAL / METADADOS PNG
+  // ==========================================================================
+  it("realiza round-trip completo de exportação e reimportação de Vault Markdown (.md) com [[WikiLinks]] e extrai texto OCR de chunks tEXt em imagens PNG", async () => {
+    const { user: author } = await registerUser({
+      email: "author-v2@example.com",
+      displayName: "Author v2",
+      password: "Password123",
+    });
+    const { user: receiver } = await registerUser({
+      email: "receiver-v2@example.com",
+      displayName: "Receiver v2",
+      password: "Password123",
+    });
+
+    await createNoteItem(author.id, {
+      title: "Fundamentos de Grafos Semânticos",
+      content:
+        "Os nós conectam-se via [[Arquitetura RAG Verificável]] e similaridade de cosseno.",
+      tags: ["grafo", "semantica"],
+    });
+    await createNoteItem(author.id, {
+      title: "Arquitetura RAG Verificável",
+      content: "Cada afirmação exige citação literal validada no servidor.",
+      tags: ["rag", "seguranca"],
+    });
+
+    // 1. Export author's library as Markdown Vault and Dry-Run + Import into receiver's account
+    const authorBundle = await exportUserLibrary(author.id);
+    const markdownVault = exportLibraryAsMarkdownVault(authorBundle);
+
+    const parsedVault = parseMarkdownVaultImport(markdownVault);
+    expect(parsedVault.items).toHaveLength(2);
+
+    const preview = await previewImportLibrary(receiver.id, markdownVault);
+    expect(preview.formatDetected).toBe("markdown-vault");
+    expect(preview.validItemsCount).toBe(2);
+    expect(preview.newItemsCount).toBe(2);
+
+    const importRep = await importUserLibrary(receiver.id, markdownVault);
+    expect(importRep.createdCount).toBe(2);
+
+    // Verify receiver's imported nodes have active bidirectional [[WikiLinks]]
+    const receiverSearch = await searchLibrary({
+      ownerId: receiver.id,
+      query: "Arquitetura RAG Verificável",
+    });
+    expect(receiverSearch.total).toBeGreaterThanOrEqual(1);
+
+    // 2. Test deterministic PNG tEXt chunk OCR extraction & worker indexing
+    const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const textPayload = Buffer.from(
+      "Description\0Diagrama Arquitetural de Rede Neural e Vetores HNSW",
+      "utf8"
+    );
+    const lenBuf = Buffer.alloc(4);
+    lenBuf.writeUInt32BE(textPayload.length, 0);
+    const typeBuf = Buffer.from("tEXt", "ascii");
+    const crcBuf = Buffer.alloc(4);
+    const pngWithTextBuffer = Buffer.concat([
+      pngSignature,
+      lenBuf,
+      typeBuf,
+      textPayload,
+      crcBuf,
+    ]);
+
+    const extractedMeta = extractEmbeddedImageMetadataText(pngWithTextBuffer);
+    expect(extractedMeta).toContain(
+      "Diagrama Arquitetural de Rede Neural e Vetores HNSW"
+    );
+
+    const uploadedImg = await createUploadedFileItem({
+      ownerId: author.id,
+      fileName: "diagrama-hnsw.png",
+      buffer: pngWithTextBuffer,
+    });
+    expect(uploadedImg.item.type).toBe("image");
+
+    await processNextJobsBatch();
+
+    const imgDetail = await getItemDetail(author.id, uploadedImg.item.id);
+    expect(imgDetail.item.processingStatus).toBe("completed");
+    expect(imgDetail.content?.extractedText).toContain(
+      "Diagrama Arquitetural de Rede Neural e Vetores HNSW"
+    );
   });
 });
 

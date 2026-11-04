@@ -21,6 +21,7 @@ import { getStorageProvider } from "@/server/storage";
 import { indexItemContent, removeItemFromSearchIndex } from "@/server/search";
 import {
   checkAndRecordAiUsage,
+  extractEmbeddedImageMetadataText,
   getUserAiConfig,
   resolveAiProviderForUser,
 } from "@/server/ai/providers";
@@ -559,8 +560,42 @@ async function executeSingleJob(
       }
     } else if (assetRecord.mimeType.startsWith("image/")) {
       extractionOrigin = "ocr";
-      // Check if image has embedded textual metadata or user caption
-      const caption = (item.metadata?.ocrText as string) || item.summary || "";
+      // Check if image has embedded textual metadata, PNG tEXt/XMP chunks, or Vision OCR provider
+      const embeddedMetaText = extractEmbeddedImageMetadataText(buffer);
+      let visionOcrText = "";
+      try {
+        const provider = await resolveAiProviderForUser(item.ownerId);
+        if (
+          provider.getCapabilities().supportsVisionOcr &&
+          provider.extractImageOcr
+        ) {
+          const ocrRes = await provider.extractImageOcr({
+            mimeType: assetRecord.mimeType,
+            imageBuffer: buffer,
+            title: item.title,
+          });
+          if (ocrRes.extractedText) {
+            visionOcrText = ocrRes.extractedText;
+            await checkAndRecordAiUsage({
+              ownerId: item.ownerId,
+              provider: provider.getCapabilities().provider,
+              model: provider.getCapabilities().modelVersion,
+              operation: "ocr",
+              inputTokens: ocrRes.tokensUsed,
+              outputTokens: Math.ceil(ocrRes.extractedText.length / 4),
+            });
+          }
+        }
+      } catch {
+        // Fallback to embedded metadata or caption if external Vision API is unreachable
+      }
+
+      const caption =
+        visionOcrText ||
+        embeddedMetaText ||
+        (item.metadata?.ocrText as string) ||
+        item.summary ||
+        "";
       if (caption) {
         extractedText = `[Texto reconhecido via OCR — sujeito a imprecisões]: ${caption}`;
       } else {

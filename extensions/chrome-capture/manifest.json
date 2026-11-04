@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Comnois Knowledge — Captura Rápida",
-  "version": "1.0.0",
-  "description": "Salve links e notas diretamente na sua Plataforma Inteligente de Conhecimento Comnois.",
-  "permissions": ["activeTab", "storage"],
+  "name": "Comnois Knowledge — Captura Rápida de Nós",
+  "version": "2.0.0",
+  "description": "Salve links, trechos selecionados e notas com [[WikiLinks]] diretamente na sua Plataforma Inteligente de Conhecimento Comnois.",
+  "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": ["http://localhost:3000/*", "https://*/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Salvar no Comnois"
+    "default_title": "Salvar Nó no Comnois"
   }
 }
 

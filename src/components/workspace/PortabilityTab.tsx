@@ -16,7 +16,7 @@ export function PortabilityTab({
   onRefreshLibrary,
   onFeedback,
 }: PortabilityTabProps) {
-  const [importFormat, setImportFormat] = useState<"json" | "html">("json");
+  const [importFormat, setImportFormat] = useState<"json" | "html" | "markdown">("json");
   const [duplicatePolicy, setDuplicatePolicy] = useState<
     "skip" | "overwrite" | "append"
   >("skip");
@@ -189,9 +189,12 @@ export function PortabilityTab({
           <Select
             label="Formato de origem"
             value={importFormat}
-            onChange={(e) => setImportFormat(e.target.value as "json" | "html")}
+            onChange={(e) =>
+              setImportFormat(e.target.value as "json" | "html" | "markdown")
+            }
           >
             <option value="json">Comnois / Karakeep JSON</option>
+            <option value="markdown">Vault Markdown / Obsidian (.md)</option>
             <option value="html">Netscape Bookmarks HTML</option>
           </Select>
 

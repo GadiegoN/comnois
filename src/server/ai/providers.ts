@@ -55,6 +55,50 @@ export interface AIProviderAdapter {
     title: string;
     content: string;
   }): Promise<{ summary: string; suggestedTags: string[]; tokensUsed: number }>;
+  extractImageOcr?(input: {
+    mimeType: string;
+    imageBuffer: Buffer;
+    title: string;
+  }): Promise<{ extractedText: string; tokensUsed: number }>;
+}
+
+/**
+ * Deterministic extractor for embedded textual chunks in PNG (`tEXt` / `iTXt`)
+ * and XMP/EXIF/ASCII metadata inside image buffers when no external Vision API is active.
+ */
+export function extractEmbeddedImageMetadataText(buffer: Buffer): string {
+  const raw = buffer.toString("latin1");
+  const collected: string[] = [];
+
+  // 1. PNG tEXt chunks: 4-byte length + "tEXt" + keyword\0value
+  let idx = 0;
+  while ((idx = raw.indexOf("tEXt", idx)) !== -1) {
+    if (idx >= 4) {
+      const len = buffer.readUInt32BE(idx - 4);
+      const dataStart = idx + 4;
+      if (len > 0 && len < 32768 && dataStart + len <= buffer.length) {
+        const chunkText = buffer
+          .subarray(dataStart, dataStart + len)
+          .toString("utf8")
+          .replace(/\0+/g, ": ")
+          .trim();
+        if (chunkText.length >= 3) {
+          collected.push(chunkText);
+        }
+      }
+    }
+    idx += 4;
+  }
+
+  // 2. XMP / dc:description or readable UTF-8 annotations
+  const utf8Str = buffer.toString("utf8");
+  const xmpMatches = utf8Str.match(/<dc:description[^>]*>([\s\S]*?)<\/dc:description>/i);
+  if (xmpMatches?.[1]) {
+    const cleanXmp = xmpMatches[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (cleanXmp) collected.push(cleanXmp);
+  }
+
+  return collected.join("\n").trim();
 }
 
 const STOPWORDS_PT = new Set([
@@ -340,6 +384,18 @@ export class ExtractiveLocalProvider implements AIProviderAdapter {
       summary,
       suggestedTags: sortedTags,
       tokensUsed: Math.ceil((input.title.length + clean.length) / 4),
+    };
+  }
+
+  async extractImageOcr(input: {
+    mimeType: string;
+    imageBuffer: Buffer;
+    title: string;
+  }): Promise<{ extractedText: string; tokensUsed: number }> {
+    const embedded = extractEmbeddedImageMetadataText(input.imageBuffer);
+    return {
+      extractedText: embedded,
+      tokensUsed: Math.ceil(embedded.length / 4),
     };
   }
 }
@@ -805,6 +861,79 @@ export class GeminiProvider implements AIProviderAdapter {
   }): Promise<{ summary: string; suggestedTags: string[]; tokensUsed: number }> {
     const fallback = new ExtractiveLocalProvider(this.dimensions);
     return fallback.summarizeAndSuggestTags(input);
+  }
+
+  async extractImageOcr(input: {
+    mimeType: string;
+    imageBuffer: Buffer;
+    title: string;
+  }): Promise<{ extractedText: string; tokensUsed: number }> {
+    if (!this.apiKey) {
+      const embedded = extractEmbeddedImageMetadataText(input.imageBuffer);
+      return { extractedText: embedded, tokensUsed: 0 };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const modelPath = this.chatModel.startsWith("models/")
+        ? this.chatModel
+        : `models/${this.chatModel}`;
+      const endpoint = `${this.baseUrl}/${modelPath}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `Extraia literalmente todo o texto visível (OCR) e descreva de forma objetiva os elementos técnicos da imagem "${input.title}".`,
+                },
+                {
+                  inlineData: {
+                    mimeType: input.mimeType,
+                    data: input.imageBuffer.toString("base64"),
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          `Google Gemini Vision OCR retornou HTTP ${res.status}`
+        );
+      }
+
+      const data = (await res.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+        }>;
+        usageMetadata?: {
+          totalTokenCount?: number;
+        };
+      };
+
+      const text =
+        data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+      return {
+        extractedText: text,
+        tokensUsed:
+          data.usageMetadata?.totalTokenCount ??
+          Math.max(50, Math.ceil(text.length / 4)),
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

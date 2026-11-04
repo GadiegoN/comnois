@@ -445,7 +445,7 @@ export interface ImportReport {
 }
 
 export interface ImportPreviewReport {
-  formatDetected: "comnois-json" | "netscape-html";
+  formatDetected: "comnois-json" | "netscape-html" | "markdown-vault";
   totalReceived: number;
   validItemsCount: number;
   newItemsCount: number;
@@ -454,21 +454,152 @@ export interface ImportPreviewReport {
   sampleTitles: string[];
 }
 
+/**
+ * Parses a Comnois/Obsidian Markdown Vault (`## [[Title]]` sections) or a standalone Markdown Note
+ * into the structured import bundle format, preserving `#tags`, `[[WikiLinks]]`, URLs and collections.
+ */
+export function parseMarkdownVaultImport(markdownContent: string): {
+  formatVersion: string;
+  collections: Array<{ name: string; description: string | null }>;
+  items: Array<z.infer<typeof importItemSchema>>;
+} {
+  const detectedCollections = new Set<string>();
+  const parsedItems: Array<z.infer<typeof importItemSchema>> = [];
+
+  // Check if this is a multi-node Comnois Vault containing `## [[Title]]` sections
+  const vaultSections = markdownContent.split(/^## \[\[([^\]]+)\]\]\s*$/m);
+  if (vaultSections.length >= 3) {
+    for (let i = 1; i < vaultSections.length; i += 2) {
+      const title = vaultSections[i].trim();
+      const bodyRaw = (vaultSections[i + 1] || "").split(/^---\s*$/m)[0].trim();
+
+      const typeMatch = bodyRaw.match(/- \*\*Tipo:\*\*\s*`(link|note|file|image)`/i);
+      const urlMatch = bodyRaw.match(/- \*\*URL Original:\*\*\s*(\S+)/i);
+      const tagsMatch = bodyRaw.match(/- \*\*Tags:\*\*\s*(.+)$/m);
+      const colsMatch = bodyRaw.match(/- \*\*Coleções:\*\*\s*(.+)$/m);
+      const summaryMatch = bodyRaw.match(/^> \*\*Resumo:\*\*\s*(.+)$/m);
+      const contentMatch = bodyRaw.split(/^### Conteúdo\s*$/m)[1];
+
+      const tags = tagsMatch
+        ? tagsMatch[1]
+            .split(/[,\s]+/)
+            .map((t) => t.replace(/^#/, "").trim())
+            .filter(Boolean)
+        : [];
+      const itemCols = colsMatch
+        ? colsMatch[1]
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean)
+        : [];
+      for (const c of itemCols) detectedCollections.add(c);
+
+      const cleanContent = (contentMatch ?? bodyRaw).trim();
+      const itemType =
+        (typeMatch?.[1]?.toLowerCase() as "link" | "note") ||
+        (urlMatch?.[1] ? "link" : "note");
+
+      parsedItems.push({
+        type: itemType === "link" && urlMatch?.[1] ? "link" : "note",
+        title: title.slice(0, 300),
+        originalUrl: urlMatch?.[1] ?? null,
+        summary: summaryMatch?.[1]?.trim() ?? null,
+        noteText: cleanContent || title,
+        extractedText: cleanContent || title,
+        isFavorite: false,
+        isArchived: false,
+        tags,
+        collections: itemCols,
+        highlights: [],
+      });
+    }
+  } else {
+    // Standalone Markdown note (with optional YAML frontmatter)
+    let body = markdownContent.trim();
+    let title = "Nota Markdown Importada";
+    const tags: string[] = [];
+
+    if (body.startsWith("---")) {
+      const endFm = body.indexOf("\n---", 3);
+      if (endFm !== -1) {
+        const fm = body.slice(3, endFm);
+        body = body.slice(endFm + 4).trim();
+        const titleFm = fm.match(/^title:\s*["']?(.+?)["']?\s*$/m);
+        if (titleFm?.[1]) title = titleFm[1].trim();
+      }
+    }
+
+    const h1Match = body.match(/^#\s+(.+)$/m);
+    if (h1Match?.[1] && title === "Nota Markdown Importada") {
+      title = h1Match[1].trim();
+    }
+
+    const inlineHashtags = body.match(/(?:^|\s)#([a-zA-Z0-9_-]{2,30})/g) ?? [];
+    for (const ht of inlineHashtags) {
+      tags.push(ht.trim().slice(1));
+    }
+
+    parsedItems.push({
+      type: "note",
+      title: title.slice(0, 300),
+      originalUrl: null,
+      summary: body.slice(0, 240),
+      noteText: body,
+      extractedText: body,
+      isFavorite: false,
+      isArchived: false,
+      tags: Array.from(new Set(tags)),
+      collections: [],
+      highlights: [],
+    });
+  }
+
+  return {
+    formatVersion: "markdown-vault-v1",
+    collections: Array.from(detectedCollections).map((name) => ({
+      name,
+      description: "Coleção importada de Vault Markdown",
+    })),
+    items: parsedItems,
+  };
+}
+
+function detectRawStringFormat(
+  raw: string
+): "netscape-html" | "markdown-vault" | "comnois-json" {
+  const trimmed = raw.trim();
+  if (
+    trimmed.startsWith("<!DOCTYPE NETSCAPE-Bookmark-file") ||
+    trimmed.toLowerCase().includes("<dl>") ||
+    trimmed.toLowerCase().includes("<dt><a")
+  ) {
+    return "netscape-html";
+  }
+  if (
+    trimmed.startsWith("---") ||
+    trimmed.startsWith("# ") ||
+    trimmed.includes("## [[")
+  ) {
+    return "markdown-vault";
+  }
+  return "comnois-json";
+}
+
 function normalizeRawImportInput(rawPayload: unknown): unknown {
   if (typeof rawPayload === "string") {
     const trimmed = rawPayload.trim();
-    if (
-      trimmed.startsWith("<!DOCTYPE NETSCAPE-Bookmark-file") ||
-      trimmed.toLowerCase().includes("<dl>") ||
-      trimmed.toLowerCase().includes("<dt><a")
-    ) {
+    const detected = detectRawStringFormat(trimmed);
+    if (detected === "netscape-html") {
       return parseNetscapeBookmarksHtml(trimmed);
+    }
+    if (detected === "markdown-vault") {
+      return parseMarkdownVaultImport(trimmed);
     }
     try {
       return JSON.parse(trimmed);
     } catch {
       throw new ValidationError(
-        "Conteúdo de importação inválido. Informe um JSON comnois-export-v1 ou um arquivo HTML de favoritos Netscape."
+        "Conteúdo de importação inválido. Informe um JSON comnois-export-v1, um Vault Markdown (.md) ou um arquivo HTML de favoritos Netscape."
       );
     }
   }
@@ -479,10 +610,10 @@ export async function previewImportLibrary(
   ownerId: string,
   rawPayload: unknown
 ): Promise<ImportPreviewReport> {
-  const isHtmlInput =
-    typeof rawPayload === "string" &&
-    (rawPayload.trim().startsWith("<!DOCTYPE NETSCAPE-Bookmark-file") ||
-      rawPayload.toLowerCase().includes("<dt><a"));
+  const detectedFormat: ImportPreviewReport["formatDetected"] =
+    typeof rawPayload === "string"
+      ? detectRawStringFormat(rawPayload)
+      : "comnois-json";
 
   const normalizedPayload = normalizeRawImportInput(rawPayload);
   const bundleCheck = importBundleSchema.safeParse(normalizedPayload);
@@ -547,7 +678,7 @@ export async function previewImportLibrary(
   }
 
   return {
-    formatDetected: isHtmlInput ? "netscape-html" : "comnois-json",
+    formatDetected: detectedFormat,
     totalReceived: bundle.items.length,
     validItemsCount,
     newItemsCount,

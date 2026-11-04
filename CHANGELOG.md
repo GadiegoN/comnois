@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.0 — 2026-11-04 — Importador Round-Trip de Vault Markdown/Obsidian, OCR Multimodal (Gemini Vision + Metadados PNG) e Extensão Chrome v2.0
+- Implementado o **Importador de Vault Markdown / Obsidian** (`parseMarkdownVaultImport` e detecção automática `markdown-vault` em `previewImportLibrary` e `importUserLibrary` em `src/server/services/portability.ts`, integrado ao seletor de formato em `src/components/workspace/PortabilityTab.tsx`), completando o ciclo *round-trip* de exportação e reimportação de múltiplos nós `.md` preservando `[[WikiLinks]]`, `#tags`, URLs e coleções.
+- Implementado **OCR Multimodal de Imagens (`extractImageOcr`) e Extrator Determinístico de Metadados `tEXt`/XMP (`extractEmbeddedImageMetadataText`)** em `src/server/ai/providers.ts` e integrado ao worker `ocr_asset` em `src/server/jobs/queue.ts`, suportando transcrição óptica nativa via Google Gemini Vision (`inlineData`) e extração offline de chunks textuais embutidos em imagens PNG/XMP.
+- Evoluída a **Extensão de Navegador Chrome/Edge para `v2.0.0`** (`extensions/chrome-capture/`), permitindo alternar entre captura de Links e captura de Notas / Trechos selecionados com `[[WikiLinks]]`.
+- Expandida a suíte de testes de integração (`tests/platform.test.ts`) para **20 cenários ponta a ponta**.
+
 ## 1.9.0 — 2026-11-04 — Exportador de Vault Markdown/Obsidian, Smart Collections via Query DSL e Grafo via MCP & CLI
 - Implementado o **Exportador de Vault Markdown / Obsidian** (`exportLibraryAsMarkdownVault` em `src/server/services/portability.ts`, endpoint `GET /api/portability?format=markdown`, comando `pnpm cli export markdown` e cartão em `src/components/workspace/PortabilityTab.tsx`), exportando a biblioteca inteira como um Vault estruturado com metadados YAML, índice completo de `[[WikiLinks]]`, tags, destaques e conteúdo.
 - Expandidas as **Coleções Inteligentes (*Smart Collections*)** (`evaluateSmartCollectionItemIds` em `src/server/services/organization.ts`) para avaliar expressões completas da **Query DSL** (`is:fav`, `type:...`, `site:...`, `#tag`, texto livre) e adicionado seletor de **Coleção Pai (`parentId`)** na criação de coleções hierárquicas em `src/components/workspace/OrganizationTab.tsx`.
