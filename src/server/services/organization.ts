@@ -24,6 +24,38 @@ import {
 // TAGS
 // ============================================================================
 
+export async function createTag(ownerId: string, rawName: string) {
+  const clean = rawName.trim().slice(0, 60);
+  const norm = normalizeSearchText(clean);
+  if (!norm) {
+    throw new ValidationError("Nome da etiqueta inválido.");
+  }
+
+  const db = await getDb();
+  const [existing] = await db
+    .select()
+    .from(tags)
+    .where(and(eq(tags.ownerId, ownerId), eq(tags.normalizedName, norm)))
+    .limit(1);
+
+  if (existing) {
+    return existing;
+  }
+
+  const id = generateId("tag");
+  await db.insert(tags).values({
+    id,
+    ownerId,
+    workspaceId: null,
+    name: clean,
+    normalizedName: norm,
+    createdAt: new Date(),
+  });
+
+  const [created] = await db.select().from(tags).where(eq(tags.id, id)).limit(1);
+  return created;
+}
+
 export async function listUserTags(ownerId: string) {
   const db = await getDb();
   const rows = await db

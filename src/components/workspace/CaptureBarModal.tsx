@@ -72,6 +72,7 @@ export function CaptureBarModal({
             : {
                 type: "note",
                 title: title.trim(),
+                content: noteContent.trim(),
                 noteText: noteContent.trim(),
                 tags: parsedTags,
                 collectionId: collectionId || undefined,

@@ -8,7 +8,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("write");
     const { id } = await context.params;
     const { jobId } = await retryItemProcessing(user.id, id);
     await processNextJobsBatch({ limit: 3 });

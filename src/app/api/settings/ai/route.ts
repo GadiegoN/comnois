@@ -8,7 +8,7 @@ import {
 
 export async function GET() {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("read");
     const fullConfig = await getUserAiConfig(user.id);
     const { _decryptedApiKey: _, ...config } = fullConfig;
     const usage = await getUserAiUsageSummary(user.id);
@@ -20,7 +20,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("write");
     const body = await req.json();
     const config = await updateUserAiConfig(user.id, body);
     const usage = await getUserAiUsageSummary(user.id);

@@ -22,29 +22,44 @@ export function PortabilityTab({
   >("skip");
   const [rawContent, setRawContent] = useState("");
   const [dryRunResult, setDryRunResult] = useState<{
-    totalParsed: number;
+    formatDetected?: string;
+    totalReceived?: number;
+    totalParsed?: number;
     newItemsCount: number;
-    duplicatesCount: number;
-    invalidCount: number;
+    existingDuplicatesCount?: number;
+    duplicatesCount?: number;
+    validItemsCount?: number;
   } | null>(null);
   const [importing, setImporting] = useState(false);
+
+  function buildImportPayload(dryRun: boolean) {
+    if (importFormat === "json") {
+      return {
+        duplicatePolicy,
+        dryRun,
+        bundle: JSON.parse(rawContent),
+      };
+    }
+    if (importFormat === "markdown") {
+      return {
+        duplicatePolicy,
+        dryRun,
+        format: "markdown",
+        rawMarkdown: rawContent,
+      };
+    }
+    return {
+      duplicatePolicy,
+      dryRun,
+      rawHtml: rawContent,
+    };
+  }
 
   async function handleDryRun() {
     if (!rawContent.trim()) return;
     setImporting(true);
     try {
-      const payload =
-        importFormat === "json"
-          ? {
-              duplicatePolicy,
-              dryRun: true,
-              bundle: JSON.parse(rawContent),
-            }
-          : {
-              duplicatePolicy,
-              dryRun: true,
-              rawHtml: rawContent,
-            };
+      const payload = buildImportPayload(true);
 
       const res = await fetch("/api/portability", {
         method: "POST",
@@ -71,18 +86,7 @@ export function PortabilityTab({
     if (!rawContent.trim()) return;
     setImporting(true);
     try {
-      const payload =
-        importFormat === "json"
-          ? {
-              duplicatePolicy,
-              dryRun: false,
-              bundle: JSON.parse(rawContent),
-            }
-          : {
-              duplicatePolicy,
-              dryRun: false,
-              rawHtml: rawContent,
-            };
+      const payload = buildImportPayload(false);
 
       const res = await fetch("/api/portability", {
         method: "POST",
@@ -94,8 +98,11 @@ export function PortabilityTab({
         throw new Error(data.error?.message || "Falha na importação.");
       }
       const rep = data.report || data;
+      const importedCount =
+        rep.importedCount ??
+        (Number(rep.createdCount ?? 0) + Number(rep.overwrittenCount ?? 0));
       onFeedback(
-        `Importação concluída: ${rep.importedCount ?? 0} importados, ${rep.skippedCount ?? 0} ignorados.`
+        `Importação concluída: ${importedCount} importados, ${rep.skippedCount ?? 0} ignorados.`
       );
       setRawContent("");
       setDryRunResult(null);
@@ -214,12 +221,20 @@ export function PortabilityTab({
         </div>
 
         <Textarea
-          label="Cole o conteúdo JSON ou HTML Bookmarks abaixo"
+          label={
+            importFormat === "json"
+              ? "Cole o conteúdo JSON abaixo"
+              : importFormat === "markdown"
+                ? "Cole a nota Markdown / Obsidian ou Vault (.md) abaixo"
+                : "Cole o conteúdo HTML Bookmarks abaixo"
+          }
           rows={5}
           placeholder={
             importFormat === "json"
-              ? '{"items": [{"type": "link", "title": "Exemplo", "sourceUrl": "https://exemplo.com"}]}'
-              : "<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><DT><A HREF='https://exemplo.com'>Exemplo</A></DL>"
+              ? '{"items": [{"type": "link", "title": "Exemplo", "originalUrl": "https://exemplo.com"}]}'
+              : importFormat === "markdown"
+                ? "---\ntitle: \"Nota do Obsidian\"\ntags: [arquitetura, rag]\n---\n\nConexão com [[Busca Híbrida]] e #seguranca."
+                : "<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><DT><A HREF='https://exemplo.com'>Exemplo</A></DL>"
           }
           value={rawContent}
           onChange={(e) => setRawContent(e.target.value)}
@@ -229,9 +244,9 @@ export function PortabilityTab({
           <div className="p-3 rounded-xl bg-brand-soft/40 border border-brand/30 text-xs flex flex-wrap items-center justify-between gap-2">
             <span className="font-semibold text-brand-text flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4" />
-              Dry-Run: {dryRunResult.totalParsed} lidos •{" "}
+              Dry-Run: {dryRunResult.totalReceived ?? dryRunResult.totalParsed ?? 0} lidos •{" "}
               {dryRunResult.newItemsCount} novos •{" "}
-              {dryRunResult.duplicatesCount} duplicados
+              {dryRunResult.existingDuplicatesCount ?? dryRunResult.duplicatesCount ?? 0} duplicados
             </span>
           </div>
         )}

@@ -7,7 +7,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("write");
     const { id } = await context.params;
     const body = await req.json();
     const created = await createHighlight({
@@ -26,7 +26,7 @@ export async function POST(
 
 export async function DELETE(req: NextRequest) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("write");
     const { searchParams } = new URL(req.url);
     const highlightId = searchParams.get("highlightId") ?? "";
     await deleteHighlight(user.id, highlightId);

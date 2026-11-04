@@ -4,7 +4,7 @@ import { executeBatchItemAction } from "@/server/services/items";
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("write");
     const body = await req.json();
 
     const result = await executeBatchItemAction({

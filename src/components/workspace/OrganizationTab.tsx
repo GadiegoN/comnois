@@ -121,14 +121,12 @@ export function OrganizationTab({
   async function handleCreateTag(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const res = await fetch("/api/items", {
+      const res = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: "note",
-          title: `Tag #${tagName.trim()}`,
-          noteText: `Nota de referência para a tag #${tagName.trim()}.`,
-          tags: [tagName.trim()],
+          action: "createTag",
+          name: tagName.trim(),
         }),
       });
       if (!res.ok) throw new Error("Falha ao criar tag.");

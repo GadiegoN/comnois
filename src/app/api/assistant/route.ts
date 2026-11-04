@@ -58,6 +58,8 @@ export async function POST(req: NextRequest) {
       conversationId: body.conversationId ?? undefined,
       saveHistory: body.saveHistory !== false,
       itemIdsFilter: Array.isArray(body.itemIdsFilter) ? body.itemIdsFilter : undefined,
+      collectionId: typeof body.collectionId === "string" && body.collectionId.trim() ? body.collectionId.trim() : undefined,
+      tag: typeof body.tag === "string" && body.tag.trim() ? body.tag.trim() : undefined,
       maxSources: body.maxSources,
     });
 

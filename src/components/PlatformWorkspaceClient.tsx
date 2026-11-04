@@ -144,7 +144,7 @@ export default function PlatformWorkspaceClient({
         : query.trim();
       if (effectiveQuery) params.set("q", effectiveQuery);
       params.set("mode", searchMode);
-      params.set("sortBy", sortBy === "title" ? "newest" : sortBy);
+      params.set("sortBy", sortBy);
       params.set("pageSize", "50");
       if (filterType) params.set("type", filterType);
       if (filterStatus) {
@@ -330,6 +330,8 @@ export default function PlatformWorkspaceClient({
         body: JSON.stringify({
           question: question.trim(),
           conversationId: selectedConversationId || undefined,
+          collectionId: scopeCollectionId || undefined,
+          tag: scopeTag || undefined,
         }),
       });
       const data = await res.json();
@@ -357,23 +359,44 @@ export default function PlatformWorkspaceClient({
     if (res.ok) {
       const data = await res.json();
       const messages = data.conversation?.messages || data.messages || [];
+      const lastUser = [...messages]
+        .reverse()
+        .find((m: { role: string }) => m.role === "user");
       const lastAssistant = [...messages]
         .reverse()
         .find((m: { role: string }) => m.role === "assistant");
       if (lastAssistant) {
+        const meta = lastAssistant.metadataJson || {};
         setAnswer({
-          question: lastAssistant.question || data.conversation?.title || "",
+          question:
+            lastUser?.content ||
+            lastAssistant.question ||
+            data.conversation?.title ||
+            "",
           answer: lastAssistant.content,
-          directEvidenceSummary: [],
-          synthesisNotes: [],
-          citations: lastAssistant.citations || [],
-          hasConflict: Boolean(lastAssistant.hasConflict),
-          insufficientEvidence: Boolean(lastAssistant.insufficientEvidence),
-          promptInjectionNeutralized: Boolean(
-            lastAssistant.promptInjectionNeutralized
+          directEvidenceSummary: Array.isArray(meta.directEvidenceSummary)
+            ? meta.directEvidenceSummary
+            : [],
+          synthesisNotes: Array.isArray(meta.synthesisNotes)
+            ? meta.synthesisNotes
+            : [],
+          citations: lastAssistant.citationsJson || lastAssistant.citations || [],
+          hasConflict: Boolean(meta.hasConflict ?? lastAssistant.hasConflict),
+          insufficientEvidence: Boolean(
+            meta.insufficientEvidence ?? lastAssistant.insufficientEvidence
           ),
-          scopeNote: data.conversation?.scopeSummary || "Histórico recuperado",
-          providerUsed: lastAssistant.providerUsed || "recorded",
+          promptInjectionNeutralized: Boolean(
+            meta.promptInjectionNeutralized ??
+              lastAssistant.promptInjectionNeutralized
+          ),
+          scopeNote:
+            (typeof meta.scopeNote === "string" && meta.scopeNote) ||
+            data.conversation?.scopeSummary ||
+            "Histórico recuperado",
+          providerUsed:
+            (typeof meta.providerUsed === "string" && meta.providerUsed) ||
+            lastAssistant.providerUsed ||
+            "recorded",
         });
       }
     }
@@ -639,7 +662,10 @@ export default function PlatformWorkspaceClient({
             workspacesData={workspacesData}
             apiTokens={apiTokens}
             webhooks={webhooks}
-            onRefreshSettings={loadSettings}
+            onRefreshSettings={async () => {
+              await loadSettings();
+              await loadOrganizationAndWorkspaceData();
+            }}
             onFeedback={showToast}
             onAccountDeleted={() => {
               router.push("/welcome");

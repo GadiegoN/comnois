@@ -154,7 +154,7 @@ export async function recoverStaleJobs(): Promise<number> {
   return recoveredCount;
 }
 
-async function applyAutomationRules(itemId: string): Promise<void> {
+export async function applyAutomationRules(itemId: string): Promise<void> {
   const db = await getDb();
   const [item] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
   if (!item) return;

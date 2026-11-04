@@ -1,16 +1,46 @@
 import React from "react";
+import type { WikiLinkReferenceInfo } from "@/types/platform";
 
 interface MarkdownReaderProps {
   content: string;
   onTextSelect?: () => void;
+  outboundLinks?: WikiLinkReferenceInfo[];
+  onOpenNode?: (id: string) => void;
 }
 
-function renderInlineFormatting(text: string): React.ReactNode[] {
+function renderInlineFormatting(
+  text: string,
+  outboundLinks?: WikiLinkReferenceInfo[],
+  onOpenNode?: (id: string) => void
+): React.ReactNode[] {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[\[[^\]]+\]\])/g);
   return parts.map((part, idx) => {
     if (part.startsWith("[[") && part.endsWith("]]") && part.length > 4) {
       const inner = part.slice(2, -2);
-      const displayLabel = inner.includes("|") ? inner.split("|")[1] : inner;
+      const targetTitle = (inner.includes("|") ? inner.split("|")[0] : inner).trim();
+      const displayLabel = (inner.includes("|") ? inner.split("|")[1] : inner).trim();
+      const resolved = outboundLinks?.find(
+        (lnk) =>
+          lnk.title.toLowerCase() === targetTitle.toLowerCase() ||
+          lnk.title.toLowerCase().includes(targetTitle.toLowerCase())
+      );
+
+      if (resolved && onOpenNode) {
+        return (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => onOpenNode(resolved.id)}
+            title={`Abrir nó conectado: ${resolved.title}`}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded-md bg-brand-soft hover:bg-brand/20 border border-brand/40 text-xs font-semibold text-brand-text cursor-pointer transition"
+          >
+            <span>[[</span>
+            <span className="underline decoration-dotted">{displayLabel}</span>
+            <span>]]</span>
+          </button>
+        );
+      }
+
       return (
         <span
           key={idx}
@@ -44,7 +74,12 @@ function renderInlineFormatting(text: string): React.ReactNode[] {
   });
 }
 
-export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
+export function MarkdownReader({
+  content,
+  onTextSelect,
+  outboundLinks,
+  onOpenNode,
+}: MarkdownReaderProps) {
   const lines = content.split("\n");
   const elements: React.ReactNode[] = [];
   let inCodeBlock = false;
@@ -95,7 +130,7 @@ export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
           key={`h1-${i}`}
           className="text-base sm:text-lg font-extrabold text-fg mt-3 mb-1.5 tracking-tight"
         >
-          {renderInlineFormatting(trimmed.slice(2))}
+          {renderInlineFormatting(trimmed.slice(2), outboundLinks, onOpenNode)}
         </h1>
       );
       continue;
@@ -107,7 +142,7 @@ export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
           key={`h2-${i}`}
           className="text-sm sm:text-base font-bold text-fg mt-3 mb-1 border-b border-border-subtle pb-1"
         >
-          {renderInlineFormatting(trimmed.slice(3))}
+          {renderInlineFormatting(trimmed.slice(3), outboundLinks, onOpenNode)}
         </h2>
       );
       continue;
@@ -119,7 +154,7 @@ export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
           key={`h3-${i}`}
           className="text-xs sm:text-sm font-bold text-brand-text mt-2.5 mb-1"
         >
-          {renderInlineFormatting(trimmed.slice(4))}
+          {renderInlineFormatting(trimmed.slice(4), outboundLinks, onOpenNode)}
         </h3>
       );
       continue;
@@ -131,7 +166,7 @@ export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
           key={`bq-${i}`}
           className="my-2 pl-3 border-l-2 border-brand italic text-xs sm:text-sm text-fg-secondary"
         >
-          {renderInlineFormatting(trimmed.slice(2))}
+          {renderInlineFormatting(trimmed.slice(2), outboundLinks, onOpenNode)}
         </blockquote>
       );
       continue;
@@ -145,7 +180,7 @@ export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
         >
           <span className="text-brand-text font-bold mt-0.5">•</span>
           <div className="flex-1">
-            {renderInlineFormatting(trimmed.slice(2))}
+            {renderInlineFormatting(trimmed.slice(2), outboundLinks, onOpenNode)}
           </div>
         </div>
       );
@@ -157,7 +192,7 @@ export function MarkdownReader({ content, onTextSelect }: MarkdownReaderProps) {
         key={`p-${i}`}
         className="text-xs sm:text-sm text-fg leading-relaxed"
       >
-        {renderInlineFormatting(rawLine)}
+        {renderInlineFormatting(rawLine, outboundLinks, onOpenNode)}
       </p>
     );
   }

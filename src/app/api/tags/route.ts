@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCurrentUser, handleApiError } from "@/server/http";
 import {
   confirmOrRejectItemTag,
+  createTag,
   deleteTag,
   listUserTags,
   renameTag,
@@ -30,6 +31,11 @@ export async function POST(req: NextRequest) {
         decision: body.action === "confirmTag" ? "confirm" : "reject",
       });
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "createTag" || typeof body.name === "string") {
+      const created = await createTag(user.id, body.name ?? "");
+      return NextResponse.json({ tag: created }, { status: 201 });
     }
 
     return NextResponse.json({ error: "Ação desconhecida." }, { status: 400 });

@@ -12,7 +12,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("read");
     const { id: assetId } = await context.params;
     const db = await getDb();
 

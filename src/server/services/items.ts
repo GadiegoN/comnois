@@ -16,7 +16,7 @@ import { generateId, sha256Hex } from "@/lib/security/crypto";
 import { normalizeUrlForDeduplication } from "@/lib/security/url-normalizer";
 import { sanitizeHtmlContent } from "@/lib/security/sanitize";
 import { detectAndValidateFileType, getStorageProvider } from "@/server/storage";
-import { enqueueJob } from "@/server/jobs/queue";
+import { applyAutomationRules, enqueueJob } from "@/server/jobs/queue";
 import {
   findRelatedItems,
   resolveNodeLinksAndBacklinks,
@@ -240,18 +240,36 @@ export async function createLinkItem(
   };
 }
 
-export const createNoteSchema = z.object({
-  title: z.string().trim().max(300).optional(),
-  content: z.string().trim().min(1, "O conteúdo da nota não pode estar vazio.").max(200_000),
-  summary: z.string().trim().max(1000).optional(),
-  tags: z.array(z.string()).optional(),
-  collectionId: z.string().optional(),
-  workspaceId: z.string().nullable().optional(),
-});
+export const createNoteSchema = z
+  .object({
+    title: z.string().trim().max(300).optional(),
+    content: z.string().trim().max(200_000).optional(),
+    noteText: z.string().trim().max(200_000).optional(),
+    summary: z.string().trim().max(1000).optional(),
+    tags: z.array(z.string()).optional(),
+    collectionId: z.string().optional(),
+    workspaceId: z.string().nullable().optional(),
+  })
+  .refine(
+    (data) =>
+      Boolean(
+        (data.content && data.content.trim().length > 0) ||
+          (data.noteText && data.noteText.trim().length > 0)
+      ),
+    { message: "O conteúdo da nota não pode estar vazio." }
+  );
 
 export async function createNoteItem(
   ownerId: string,
-  input: z.infer<typeof createNoteSchema>
+  input: {
+    title?: string;
+    content?: string;
+    noteText?: string;
+    summary?: string;
+    tags?: string[];
+    collectionId?: string;
+    workspaceId?: string | null;
+  }
 ) {
   const parsed = createNoteSchema.safeParse(input);
   if (!parsed.success) {
@@ -265,7 +283,7 @@ export async function createNoteItem(
   const db = await getDb();
   const itemId = generateId("itm");
   const now = new Date();
-  const cleanNote = parsed.data.content.trim();
+  const cleanNote = (parsed.data.content || parsed.data.noteText || "").trim();
   const autoTitle =
     parsed.data.title && parsed.data.title.trim().length > 0
       ? parsed.data.title.trim()
@@ -323,7 +341,8 @@ export async function createNoteItem(
     });
   }
 
-  // Notes do not depend on an external extraction service; index immediately
+  // Apply deterministic automation rules and index immediately
+  await applyAutomationRules(itemId);
   await indexItemContent(itemId, { generateEmbeddings: true, expectedContentVersion: 1 });
 
   const [created] = await db.select().from(items).where(eq(items.id, itemId)).limit(1);

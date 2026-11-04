@@ -6,6 +6,10 @@ import {
   embeddings,
   assistantConversations,
   assistantMessages,
+  collections,
+  collectionItems,
+  itemTags,
+  tags,
 } from "@/db/schema";
 import { generateId } from "@/lib/security/crypto";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
@@ -19,6 +23,10 @@ import {
 } from "./providers";
 import { requireWorkspaceRole } from "@/server/services/workspaces";
 import { createNoteItem } from "@/server/services/items";
+import {
+  evaluateSmartCollectionItemIds,
+  SmartCollectionRules,
+} from "@/server/services/organization";
 
 const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|rules|prompts)/gi,
@@ -87,6 +95,8 @@ export async function askKnowledgeAssistant(input: {
   conversationId?: string;
   saveHistory?: boolean;
   itemIdsFilter?: string[];
+  collectionId?: string;
+  tag?: string;
   maxSources?: number;
   customProvider?: AIProviderAdapter;
 }): Promise<AssistantQueryResult> {
@@ -126,9 +136,55 @@ export async function askKnowledgeAssistant(input: {
         : eq(items.ownerId, input.ownerId)
     );
 
-  const filteredItems = input.itemIdsFilter?.length
+  let scopedItems = input.itemIdsFilter?.length
     ? authorizedItems.filter((i) => input.itemIdsFilter!.includes(i.id))
     : authorizedItems.filter((i) => !i.isArchived);
+
+  if (input.collectionId && scopedItems.length > 0) {
+    const [colDef] = await db
+      .select()
+      .from(collections)
+      .where(
+        and(
+          eq(collections.id, input.collectionId),
+          eq(collections.ownerId, input.ownerId)
+        )
+      )
+      .limit(1);
+
+    if (colDef && colDef.type === "smart" && colDef.smartRules) {
+      const smartMatchedIds = new Set(
+        await evaluateSmartCollectionItemIds(
+          input.ownerId,
+          colDef.smartRules as SmartCollectionRules
+        )
+      );
+      scopedItems = scopedItems.filter((i) => smartMatchedIds.has(i.id));
+    } else {
+      const colRows = await db
+        .select({ itemId: collectionItems.itemId })
+        .from(collectionItems)
+        .where(eq(collectionItems.collectionId, input.collectionId));
+      const allowedColSet = new Set(colRows.map((r) => r.itemId));
+      scopedItems = scopedItems.filter((i) => allowedColSet.has(i.id));
+    }
+  }
+
+  if (input.tag && input.tag.trim() && scopedItems.length > 0) {
+    const normTag = normalizeSearchText(input.tag.replace(/^#/, "").trim());
+    const candidateIds = scopedItems.map((i) => i.id);
+    const tagRows = await db
+      .select({ itemId: itemTags.itemId, normalizedName: tags.normalizedName })
+      .from(itemTags)
+      .innerJoin(tags, eq(itemTags.tagId, tags.id))
+      .where(inArray(itemTags.itemId, candidateIds));
+    const allowedTagSet = new Set(
+      tagRows.filter((r) => r.normalizedName === normTag).map((r) => r.itemId)
+    );
+    scopedItems = scopedItems.filter((i) => allowedTagSet.has(i.id));
+  }
+
+  const filteredItems = scopedItems;
 
   if (filteredItems.length === 0) {
     return {

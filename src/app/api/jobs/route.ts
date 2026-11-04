@@ -10,7 +10,7 @@ import { runCliCommand } from "@/cli";
 
 export async function GET() {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("read");
     const metrics = await getQueueMetrics(user.id);
     return NextResponse.json(metrics);
   } catch (err) {
@@ -20,7 +20,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireCurrentUser();
+    const user = await requireCurrentUser("write");
     const body = await req.json().catch(() => ({}));
 
     if (body.action === "ingestDocs") {

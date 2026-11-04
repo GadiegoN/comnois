@@ -198,7 +198,7 @@ export interface SearchFilters {
   processingStatus?: "pending" | "processing" | "completed" | "partial" | "failed" | "cancelled";
   dateFrom?: Date;
   dateTo?: Date;
-  sortBy?: "newest" | "oldest" | "updated" | "relevance";
+  sortBy?: "newest" | "oldest" | "updated" | "relevance" | "title";
   page?: number;
   pageSize?: number;
 }
@@ -467,6 +467,10 @@ export async function searchLibrary(filters: SearchFilters): Promise<SearchRespo
       filters.sortBy === "relevance" || !filters.sortBy ? "newest" : filters.sortBy;
 
     const sorted = [...filteredItems].sort((a, b) => {
+      if (sortBy === "title") {
+        const cmp = a.title.localeCompare(b.title, "pt-BR");
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+      }
       if (sortBy === "oldest") {
         const diff = a.createdAt.getTime() - b.createdAt.getTime();
         return diff !== 0 ? diff : a.id.localeCompare(b.id);
@@ -685,6 +689,10 @@ export async function searchLibrary(filters: SearchFilters): Promise<SearchRespo
 
   const sortBy = filters.sortBy ?? "relevance";
   scoredItems.sort((a, b) => {
+    if (sortBy === "title") {
+      const cmp = a.item.title.localeCompare(b.item.title, "pt-BR");
+      return cmp !== 0 ? cmp : a.item.id.localeCompare(b.item.id);
+    }
     if (sortBy === "newest") {
       const diff = b.item.createdAt.getTime() - a.item.createdAt.getTime();
       return diff !== 0 ? diff : a.item.id.localeCompare(b.item.id);

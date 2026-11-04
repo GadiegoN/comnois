@@ -39,6 +39,7 @@ import {
   moveCollection,
   addItemToCollection,
   deleteCollection,
+  createTag,
   listUserTags,
   deleteTag,
   confirmOrRejectItemTag,
@@ -1663,6 +1664,39 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
     expect(imgDetail.content?.extractedText).toContain(
       "Diagrama Arquitetural de Rede Neural e Vetores HNSW"
     );
+
+    // 3. Verify UI-aligned contracts: createNoteItem with noteText + automation rules, createTag, sortBy="title", and RAG scoped by collectionId & tag
+    await createAutomationRule({
+      ownerId: author.id,
+      name: "Favoritar notas de RFC",
+      conditions: { titleContains: "RFC" },
+      actions: { addTags: ["rfc-auto"], markFavorite: true },
+    });
+
+    const noteViaUiPayload = await createNoteItem(author.id, {
+      title: "RFC 9999 — Protocolo de Sincronização",
+      noteText: "Especificação determinística do protocolo RFC 9999.",
+    });
+    const noteDetail = await getItemDetail(author.id, noteViaUiPayload.item.id);
+    expect(noteDetail.item.isFavorite).toBe(true);
+    expect(noteDetail.tags.some((t) => t.name === "rfc-auto")).toBe(true);
+
+    const standaloneTag = await createTag(author.id, "tag-direta");
+    expect(standaloneTag.name).toBe("tag-direta");
+
+    const sortedByTitle = await searchLibrary({
+      ownerId: author.id,
+      sortBy: "title",
+    });
+    expect(sortedByTitle.results[0].title).toBe("Arquitetura RAG Verificável");
+
+    const scopedRag = await askKnowledgeAssistant({
+      ownerId: author.id,
+      question: "O que especifica o protocolo RFC 9999?",
+      tag: "rfc-auto",
+    });
+    expect(scopedRag.insufficientEvidence).toBe(false);
+    expect(scopedRag.citations[0].itemId).toBe(noteViaUiPayload.item.id);
   });
 });
 

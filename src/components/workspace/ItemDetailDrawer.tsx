@@ -408,6 +408,8 @@ export function ItemDetailDrawer({
               {readerMode === "editorial" ? (
                 <MarkdownReader
                   content={fullText || "Sem conteúdo textual extraído."}
+                  outboundLinks={detail.outboundLinks}
+                  onOpenNode={onOpenOtherItem}
                   onTextSelect={() => {
                     const selected = window.getSelection()?.toString().trim();
                     if (selected && selected.length >= 5) {

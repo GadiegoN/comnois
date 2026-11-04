@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       | "failed"
       | "cancelled"
       | null;
-    const sortBy = (searchParams.get("sortBy") as "newest" | "oldest" | "updated" | "relevance") || undefined;
+    const sortBy = (searchParams.get("sortBy") as "newest" | "oldest" | "updated" | "relevance" | "title") || undefined;
     const page = Number(searchParams.get("page") ?? "1");
     const pageSize = Number(searchParams.get("pageSize") ?? "20");
     const workspaceId = searchParams.get("workspaceId") || undefined;
