@@ -588,6 +588,13 @@ export default function PlatformWorkspaceClient({
             onDeleteConversation={handleDeleteConversation}
             onPurgeOldConversations={handlePurgeOldConversations}
             onOpenCitedItem={openItemDetail}
+            onSynthesisSaved={async (itemId) => {
+              showToast(
+                "Síntese salva como Nó Permanente com [[WikiLinks]] para as fontes citadas!"
+              );
+              await loadLibrary();
+              await openItemDetail(itemId);
+            }}
           />
         )}
 

@@ -6,8 +6,23 @@ interface MarkdownReaderProps {
 }
 
 function renderInlineFormatting(text: string): React.ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[\[[^\]]+\]\])/g);
   return parts.map((part, idx) => {
+    if (part.startsWith("[[") && part.endsWith("]]") && part.length > 4) {
+      const inner = part.slice(2, -2);
+      const displayLabel = inner.includes("|") ? inner.split("|")[1] : inner;
+      return (
+        <span
+          key={idx}
+          title={`WikiLink para nó: ${inner}`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded-md bg-brand-soft border border-brand/30 text-xs font-semibold text-brand-text"
+        >
+          <span>[[</span>
+          <span>{displayLabel}</span>
+          <span>]]</span>
+        </span>
+      );
+    }
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       return (
         <code

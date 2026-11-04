@@ -19,6 +19,7 @@ import { detectAndValidateFileType, getStorageProvider } from "@/server/storage"
 import { enqueueJob } from "@/server/jobs/queue";
 import {
   findRelatedItems,
+  resolveNodeLinksAndBacklinks,
   indexItemContent,
   removeItemFromSearchIndex,
 } from "@/server/search";
@@ -504,11 +505,14 @@ export async function getItemDetail(userId: string, itemId: string) {
     .where(eq(processingJobs.itemId, itemId))
     .orderBy(desc(processingJobs.createdAt));
 
-  const relatedItems = await findRelatedItems({
-    ownerId: item.ownerId,
-    itemId: item.id,
-    limit: 5,
-  });
+  const [relatedItems, wikiConnections] = await Promise.all([
+    findRelatedItems({
+      ownerId: item.ownerId,
+      itemId: item.id,
+      limit: 5,
+    }),
+    resolveNodeLinksAndBacklinks(item.ownerId, item.id),
+  ]);
 
   return {
     item,
@@ -527,6 +531,8 @@ export async function getItemDetail(userId: string, itemId: string) {
     highlights: itemHighlights,
     jobs,
     relatedItems,
+    outboundLinks: wikiConnections.outboundLinks,
+    backlinks: wikiConnections.backlinks,
   };
 }
 
@@ -836,6 +842,15 @@ export async function exportSingleItemAsMarkdown(
   lines.push("");
   lines.push(bodyText);
   lines.push("");
+
+  if (detail.backlinks.length > 0) {
+    lines.push("## Backlinks (Nós que citam este documento)");
+    lines.push("");
+    for (const bl of detail.backlinks) {
+      lines.push(`- [[${bl.title}]]${bl.contextSnippet ? ` — "${bl.contextSnippet}"` : ""}`);
+    }
+    lines.push("");
+  }
 
   const markdown = lines.join("\n");
   return {

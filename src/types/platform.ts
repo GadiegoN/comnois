@@ -105,6 +105,13 @@ export interface RelatedItemConnection {
   connectionReason: string;
 }
 
+export interface WikiLinkReferenceInfo {
+  id: string;
+  title: string;
+  type: "link" | "note" | "file" | "image";
+  contextSnippet?: string;
+}
+
 export interface ItemDetailData {
   item: SearchItem & { contentVersion: number };
   content: {
@@ -139,6 +146,8 @@ export interface ItemDetailData {
     lastError: string | null;
   }>;
   relatedItems?: RelatedItemConnection[];
+  outboundLinks?: WikiLinkReferenceInfo[];
+  backlinks?: WikiLinkReferenceInfo[];
 }
 
 export interface QueueMetricsData {

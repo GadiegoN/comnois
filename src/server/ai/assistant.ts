@@ -18,6 +18,7 @@ import {
   AIProviderAdapter,
 } from "./providers";
 import { requireWorkspaceRole } from "@/server/services/workspaces";
+import { createNoteItem } from "@/server/services/items";
 
 const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|rules|prompts)/gi,
@@ -625,5 +626,92 @@ export async function purgeAssistantHistory(
     .where(eq(assistantConversations.ownerId, ownerId));
 
   return { deletedConversationsCount: existing.length };
+}
+
+/**
+ * Converts a grounded RAG response into a permanent Synthesis Knowledge Node (`note`),
+ * automatically embedding `[[WikiLinks]]` to every cited document so the new node
+ * links bidirectionally in the Knowledge Graph.
+ */
+export async function saveAssistantAnswerAsNote(input: {
+  ownerId: string;
+  workspaceId?: string | null;
+  question: string;
+  answer: string;
+  directEvidenceSummary?: string[];
+  synthesisNotes?: string[];
+  citations?: Array<{
+    citationId: string;
+    itemId: string;
+    title: string;
+    quote: string;
+    locator: string;
+  }>;
+  tags?: string[];
+}) {
+  const cleanQuestion = input.question.trim() || "Síntese do Assistente RAG";
+  const title = cleanQuestion.startsWith("Síntese:")
+    ? cleanQuestion.slice(0, 120)
+    : `Síntese: ${cleanQuestion.slice(0, 110)}`;
+
+  const sections: string[] = [
+    `# ${title}`,
+    "",
+    `> **Pergunta Original:** ${cleanQuestion}`,
+    "",
+    "## Resposta Fundamentada",
+    "",
+    input.answer.trim(),
+    "",
+  ];
+
+  if (input.directEvidenceSummary && input.directEvidenceSummary.length > 0) {
+    sections.push("## Evidências Diretas Verificadas");
+    sections.push("");
+    for (const ev of input.directEvidenceSummary) {
+      sections.push(`- ${ev}`);
+    }
+    sections.push("");
+  }
+
+  if (input.synthesisNotes && input.synthesisNotes.length > 0) {
+    sections.push("## Notas de Síntese");
+    sections.push("");
+    for (const note of input.synthesisNotes) {
+      sections.push(`- ${note}`);
+    }
+    sections.push("");
+  }
+
+  const uniqueSourceTitles = new Set<string>();
+  if (input.citations && input.citations.length > 0) {
+    sections.push("## Fontes Citadas & Conexões (`[[WikiLinks]]`)");
+    sections.push("");
+    for (const cit of input.citations) {
+      uniqueSourceTitles.add(cit.title);
+      sections.push(
+        `- **[${cit.citationId}]** [[${cit.title}]] (${cit.locator}): "${cit.quote}"`
+      );
+    }
+    sections.push("");
+  }
+
+  const markdownContent = sections.join("\n");
+  const mergedTags = Array.from(
+    new Set(["sintese-rag", "conhecimento", ...(input.tags ?? [])])
+  );
+
+  const created = await createNoteItem(input.ownerId, {
+    title,
+    content: markdownContent,
+    summary: input.answer.trim().slice(0, 280),
+    tags: mergedTags,
+    workspaceId: input.workspaceId ?? null,
+  });
+
+  return {
+    item: created.item,
+    linkedSourceTitles: Array.from(uniqueSourceTitles),
+  };
 }
 

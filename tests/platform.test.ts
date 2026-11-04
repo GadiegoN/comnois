@@ -50,6 +50,8 @@ import {
   reindexUserLibrary,
   findRelatedItems,
   buildKnowledgeGraph,
+  extractWikiLinks,
+  resolveNodeLinksAndBacklinks,
   getEmbeddingIndexDiagnostics,
 } from "@/server/search";
 import { runSearchAndRagEvaluationBenchmark } from "@/server/search/evaluator";
@@ -72,6 +74,7 @@ import {
   listAssistantConversations,
   getAssistantConversationMessages,
   purgeAssistantHistory,
+  saveAssistantAnswerAsNote,
 } from "@/server/ai/assistant";
 import { handleMcpJsonRpcRequest } from "@/server/mcp";
 import {
@@ -1407,6 +1410,96 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
     const resolvedProvider = await resolveAiProviderForUser(alice.id);
     expect(resolvedProvider.getCapabilities().provider).toBe("gemini");
     expect(resolvedProvider).toBeInstanceOf(GeminiProvider);
+  });
+
+  // ==========================================================================
+  // 18. LINKS BIDIRECIONAIS `[[WIKILINKS]]`, BACKLINKS E SÍNTESE RAG EM NÓ PERMANENTE
+  // ==========================================================================
+  it("resolve [[WikiLinks]] e Backlinks bidirecionais entre nós, promove arestas explícitas no grafo e transforma respostas RAG em Nós Permanentes conectados", async () => {
+    const { user: alice } = await registerUser({
+      email: "alice-wikilinks@example.com",
+      displayName: "Alice Wiki",
+      password: "Password123",
+    });
+
+    const parsedTargets = extractWikiLinks(
+      "Consulte [[Arquitetura Hexagonal]] e também [[ Segurança Anti-SSRF | Camada SSRF ]]."
+    );
+    expect(parsedTargets).toEqual([
+      "Arquitetura Hexagonal",
+      "Segurança Anti-SSRF",
+    ]);
+
+    const sourceNode = await createNoteItem(alice.id, {
+      title: "Segurança Anti-SSRF",
+      content:
+        "Toda requisição externa valida DNS, bloqueia IPs privados (127.0.0.1, 169.254.169.254) e revalida cada redirecionamento HTTP.",
+      tags: ["seguranca"],
+    });
+
+    const referencingNode = await createNoteItem(alice.id, {
+      title: "Guia de Captura de Links",
+      content:
+        "O pipeline de captura aplica as regras descritas em [[Segurança Anti-SSRF]] antes de qualquer download remoto.",
+      tags: ["captura"],
+    });
+
+    // 1. Outbound links on referencingNode & Incoming Backlinks on sourceNode
+    const refConnections = await resolveNodeLinksAndBacklinks(
+      alice.id,
+      referencingNode.item.id
+    );
+    expect(refConnections.outboundLinks).toHaveLength(1);
+    expect(refConnections.outboundLinks[0].id).toBe(sourceNode.item.id);
+
+    const sourceDetail = await getItemDetail(alice.id, sourceNode.item.id);
+    expect(sourceDetail.backlinks).toHaveLength(1);
+    expect(sourceDetail.backlinks[0].id).toBe(referencingNode.item.id);
+    expect(sourceDetail.backlinks[0].contextSnippet).toContain(
+      "[[Segurança Anti-SSRF]]"
+    );
+
+    // 2. Knowledge Graph promotes explicit [[WikiLink]] to similarityScore = 1.0 & isExplicitWikiLink = true
+    const graph = await buildKnowledgeGraph(alice.id, { minSimilarity: 0.9 });
+    const explicitEdge = graph.edges.find(
+      (e) =>
+        (e.source === sourceNode.item.id &&
+          e.target === referencingNode.item.id) ||
+        (e.source === referencingNode.item.id &&
+          e.target === sourceNode.item.id)
+    );
+    expect(explicitEdge).toBeDefined();
+    expect(explicitEdge!.isExplicitWikiLink).toBe(true);
+    expect(explicitEdge!.similarityScore).toBe(1);
+
+    // 3. Transform a Grounded RAG Answer into a Permanent Synthesis Node with [[WikiLinks]]
+    const synthesis = await saveAssistantAnswerAsNote({
+      ownerId: alice.id,
+      question: "Como funciona a proteção contra SSRF?",
+      answer:
+        "A plataforma valida a resolução DNS e bloqueia IPs privados conforme [CIT-1].",
+      directEvidenceSummary: ["Validação DNS e bloqueio de IPs privados [CIT-1]."],
+      citations: [
+        {
+          citationId: "CIT-1",
+          itemId: sourceNode.item.id,
+          title: sourceNode.item.title,
+          quote:
+            "Toda requisição externa valida DNS, bloqueia IPs privados (127.0.0.1, 169.254.169.254)",
+          locator: "Parágrafo 1",
+        },
+      ],
+    });
+
+    expect(synthesis.item.title).toContain("Síntese:");
+    expect(synthesis.linkedSourceTitles).toContain("Segurança Anti-SSRF");
+
+    // Source node now has 2 incoming backlinks (referencingNode + synthesis node)
+    const updatedSourceDetail = await getItemDetail(alice.id, sourceNode.item.id);
+    expect(updatedSourceDetail.backlinks).toHaveLength(2);
+    expect(
+      updatedSourceDetail.backlinks.some((b) => b.id === synthesis.item.id)
+    ).toBe(true);
   });
 });
 

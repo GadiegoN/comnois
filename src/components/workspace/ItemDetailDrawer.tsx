@@ -532,6 +532,70 @@ export function ItemDetailDrawer({
               )}
             </div>
 
+            {/* Bidirectional WikiLinks & Backlinks */}
+            {((detail.outboundLinks && detail.outboundLinks.length > 0) ||
+              (detail.backlinks && detail.backlinks.length > 0)) && (
+              <div className="space-y-3 pt-2 border-t border-border-subtle">
+                <div className="text-xs font-semibold uppercase tracking-wider text-fg-muted flex items-center gap-1.5">
+                  <Network className="w-3.5 h-3.5 text-brand-text" />
+                  Links Bidirecionais entre Nós ([[WikiLinks]] & Backlinks)
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {detail.outboundLinks && detail.outboundLinks.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold text-fg-secondary">
+                        Nós Referenciados neste Documento ({detail.outboundLinks.length})
+                      </div>
+                      {detail.outboundLinks.map((lnk) => (
+                        <Card
+                          key={`out-${lnk.id}`}
+                          interactive
+                          padding="sm"
+                          onClick={() => onOpenOtherItem(lnk.id)}
+                          className="flex items-center justify-between gap-2 bg-brand-soft/30 border-brand/30"
+                        >
+                          <span className="text-xs font-semibold text-fg truncate">
+                            [[{lnk.title}]]
+                          </span>
+                          <Badge variant="brand">{lnk.type}</Badge>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {detail.backlinks && detail.backlinks.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold text-fg-secondary">
+                        Backlinks — Nós que citam este Documento ({detail.backlinks.length})
+                      </div>
+                      {detail.backlinks.map((bl) => (
+                        <Card
+                          key={`back-${bl.id}`}
+                          interactive
+                          padding="sm"
+                          onClick={() => onOpenOtherItem(bl.id)}
+                          className="space-y-1 bg-elevated/60"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-fg truncate">
+                              ← {bl.title}
+                            </span>
+                            <Badge variant="purple">Backlink</Badge>
+                          </div>
+                          {bl.contextSnippet && (
+                            <p className="text-[11px] text-fg-secondary italic line-clamp-2">
+                              &ldquo;{bl.contextSnippet}&rdquo;
+                            </p>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Semantic Related Items Graph */}
             {detail.relatedItems && detail.relatedItems.length > 0 && (
               <div className="space-y-3 pt-2 border-t border-border-subtle">

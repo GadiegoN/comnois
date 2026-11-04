@@ -1046,7 +1046,130 @@ export interface KnowledgeGraphEdge {
   similarityScore: number;
   vectorSimilarity: number;
   sharedTags: string[];
+  isExplicitWikiLink?: boolean;
   connectionReason: string;
+}
+
+export interface NodeWikiLinkReference {
+  id: string;
+  title: string;
+  type: "link" | "note" | "file" | "image";
+  contextSnippet?: string;
+}
+
+/**
+ * Extracts explicit `[[Target Node]]` or `[[Target Node|Alias]]` references from Markdown text.
+ */
+export function extractWikiLinks(text: string): string[] {
+  if (!text) return [];
+  const regex = /\[\[([^[\]|]+?)(?:\|[^[\]]+?)?\]\]/g;
+  const targets: string[] = [];
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const rawTarget = match[1].trim();
+    const norm = normalizeSearchText(rawTarget);
+    if (norm && !seen.has(norm)) {
+      seen.add(norm);
+      targets.push(rawTarget);
+    }
+  }
+  return targets;
+}
+
+/**
+ * Resolves bidirectional node connections (`outboundLinks` & `backlinks`) based on `[[WikiLinks]]`
+ * strictly isolated to `ownerId`.
+ */
+export async function resolveNodeLinksAndBacklinks(
+  ownerId: string,
+  itemId: string
+): Promise<{
+  outboundLinks: NodeWikiLinkReference[];
+  backlinks: NodeWikiLinkReference[];
+}> {
+  const db = await getDb();
+  const userRows = await db
+    .select({
+      id: items.id,
+      title: items.title,
+      type: items.type,
+      summary: items.summary,
+      noteText: itemContents.noteText,
+      extractedText: itemContents.extractedText,
+    })
+    .from(items)
+    .leftJoin(itemContents, eq(itemContents.itemId, items.id))
+    .where(eq(items.ownerId, ownerId));
+
+  const current = userRows.find((r) => r.id === itemId);
+  if (!current) {
+    return { outboundLinks: [], backlinks: [] };
+  }
+
+  const currentNormTitle = normalizeSearchText(current.title);
+  const currentBody = [
+    current.summary ?? "",
+    current.noteText ?? "",
+    current.extractedText ?? "",
+  ].join("\n");
+
+  const outboundNormTargets = new Set(
+    extractWikiLinks(currentBody).map((t) => normalizeSearchText(t))
+  );
+
+  const outboundLinks: NodeWikiLinkReference[] = [];
+  const backlinks: NodeWikiLinkReference[] = [];
+
+  for (const candidate of userRows) {
+    if (candidate.id === itemId) continue;
+    const candidateNormTitle = normalizeSearchText(candidate.title);
+
+    // 1. Outbound link: current item references `[[candidate.title]]` or `[[candidate.id]]`
+    if (
+      (candidateNormTitle && outboundNormTargets.has(candidateNormTitle)) ||
+      outboundNormTargets.has(normalizeSearchText(candidate.id))
+    ) {
+      outboundLinks.push({
+        id: candidate.id,
+        title: candidate.title,
+        type: candidate.type as "link" | "note" | "file" | "image",
+      });
+    }
+
+    // 2. Backlink: candidate item references `[[current.title]]` or `[[current.id]]`
+    const candidateBody = [
+      candidate.summary ?? "",
+      candidate.noteText ?? "",
+      candidate.extractedText ?? "",
+    ].join("\n");
+
+    const candidateTargets = extractWikiLinks(candidateBody).map((t) =>
+      normalizeSearchText(t)
+    );
+    if (
+      (currentNormTitle && candidateTargets.includes(currentNormTitle)) ||
+      candidateTargets.includes(normalizeSearchText(current.id))
+    ) {
+      // Extract a short context snippet around `[[`
+      const bracketIdx = candidateBody.indexOf("[[");
+      const start = Math.max(0, bracketIdx - 45);
+      const end = Math.min(candidateBody.length, bracketIdx + 115);
+      const snippet =
+        bracketIdx >= 0
+          ? candidateBody.slice(start, end).replace(/\s+/g, " ").trim()
+          : (candidate.summary ?? "").slice(0, 120);
+
+      backlinks.push({
+        id: candidate.id,
+        title: candidate.title,
+        type: candidate.type as "link" | "note" | "file" | "image",
+        contextSnippet: snippet,
+      });
+    }
+  }
+
+  return { outboundLinks, backlinks };
 }
 
 export interface KnowledgeGraphPayload {
@@ -1076,12 +1199,16 @@ export async function buildKnowledgeGraph(
       id: items.id,
       title: items.title,
       type: items.type,
+      summary: items.summary,
       isFavorite: items.isFavorite,
       isArchived: items.isArchived,
       domain: items.domain,
       createdAt: items.createdAt,
+      noteText: itemContents.noteText,
+      extractedText: itemContents.extractedText,
     })
     .from(items)
+    .leftJoin(itemContents, eq(itemContents.itemId, items.id))
     .where(and(eq(items.ownerId, ownerId), eq(items.isArchived, false)))
     .orderBy(desc(items.isFavorite), desc(items.createdAt))
     .limit(maxNodes);
@@ -1095,6 +1222,18 @@ export async function buildKnowledgeGraph(
   }
 
   const itemIds = userItems.map((i) => i.id);
+  const wikiTargetsByItem = new Map<string, Set<string>>();
+  for (const it of userItems) {
+    const combinedText = [
+      it.summary ?? "",
+      it.noteText ?? "",
+      it.extractedText ?? "",
+    ].join("\n");
+    wikiTargetsByItem.set(
+      it.id,
+      new Set(extractWikiLinks(combinedText).map((w) => normalizeSearchText(w)))
+    );
+  }
 
   // Load confirmed tags for these items
   const tagRows = await db
@@ -1195,15 +1334,35 @@ export async function buildKnowledgeGraph(
       );
       const domainBonus = sameDomain ? 0.12 : 0;
 
-      const combinedScore = Number(
-        Math.min(1, vectorSim * 0.65 + tagSim * 0.3 + domainBonus).toFixed(4)
+      const normTitleA = normalizeSearchText(a.title);
+      const normTitleB = normalizeSearchText(b.title);
+      const wikiA = wikiTargetsByItem.get(a.id);
+      const wikiB = wikiTargetsByItem.get(b.id);
+      const isExplicitWikiLink = Boolean(
+        (normTitleB && wikiA?.has(normTitleB)) ||
+          (normTitleA && wikiB?.has(normTitleA)) ||
+          wikiA?.has(normalizeSearchText(b.id)) ||
+          wikiB?.has(normalizeSearchText(a.id))
       );
 
-      if (combinedScore < minSimilarity && sharedTags.length === 0) {
+      const combinedScore = isExplicitWikiLink
+        ? 1
+        : Number(
+            Math.min(1, vectorSim * 0.65 + tagSim * 0.3 + domainBonus).toFixed(4)
+          );
+
+      if (
+        !isExplicitWikiLink &&
+        combinedScore < minSimilarity &&
+        sharedTags.length === 0
+      ) {
         continue;
       }
 
       const reasons: string[] = [];
+      if (isExplicitWikiLink) {
+        reasons.push("Link explícito [[WikiLink]]");
+      }
       if (vectorSim >= 0.3) {
         reasons.push(`Semântica ${Math.round(vectorSim * 100)}%`);
       }
@@ -1221,6 +1380,7 @@ export async function buildKnowledgeGraph(
         similarityScore: combinedScore,
         vectorSimilarity: Number(vectorSim.toFixed(4)),
         sharedTags,
+        isExplicitWikiLink,
         connectionReason: reasons.join(" • ") || "Afinidade conceitual",
       });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Sparkles,
   Send,
@@ -11,6 +11,7 @@ import {
   History,
   Trash2,
   ExternalLink,
+  BookmarkPlus,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -48,6 +49,7 @@ interface AssistantTabProps {
   onDeleteConversation: (id: string) => Promise<void>;
   onPurgeOldConversations: () => Promise<void>;
   onOpenCitedItem: (itemId: string) => void;
+  onSynthesisSaved?: (itemId: string) => Promise<void> | void;
 }
 
 const EXAMPLE_QUESTIONS = [
@@ -74,7 +76,42 @@ export function AssistantTab({
   onDeleteConversation,
   onPurgeOldConversations,
   onOpenCitedItem,
+  onSynthesisSaved,
 }: AssistantTabProps) {
+  const [savingNode, setSavingNode] = useState(false);
+
+  async function handleSaveAnswerAsNode() {
+    if (!answer) return;
+    setSavingNode(true);
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "saveAsNote",
+          question: answer.question || question,
+          answer: answer.answer,
+          directEvidenceSummary: answer.directEvidenceSummary,
+          synthesisNotes: answer.synthesisNotes,
+          citations: answer.citations.map((c, idx) => ({
+            citationId: c.citationId || `CIT-${idx + 1}`,
+            itemId: c.itemId,
+            title: c.title || c.itemTitle || "Fonte",
+            quote: c.quote,
+            locator: c.locator || c.sectionTitle || "Trecho",
+          })),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (onSynthesisSaved && data.item?.id) {
+          await onSynthesisSaved(data.item.id);
+        }
+      }
+    } finally {
+      setSavingNode(false);
+    }
+  }
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* Left Column: RAG Prompt & Grounded Answer */}
@@ -171,7 +208,23 @@ export function AssistantTab({
                 </Badge>
                 <Badge variant="default">Motor: {answer.providerUsed}</Badge>
               </div>
-              <span className="text-xs text-fg-muted">{answer.scopeNote}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-fg-muted">{answer.scopeNote}</span>
+                {!answer.insufficientEvidence && (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="secondary"
+                    disabled={savingNode}
+                    leftIcon={<BookmarkPlus className="w-3.5 h-3.5 text-brand-text" />}
+                    onClick={handleSaveAnswerAsNode}
+                  >
+                    {savingNode
+                      ? "Salvando Nó..."
+                      : "Salvar Síntese como Nó ([[WikiLinks]])"}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {answer.promptInjectionNeutralized && (
