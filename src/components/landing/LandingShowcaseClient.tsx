@@ -8,14 +8,14 @@ import {
   CheckCircle2,
   ShieldCheck,
   FileCode,
-  ArrowUpRight,
   Layers,
   Quote,
+  Network,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 
-type ShowcaseMode = "hybrid" | "rag" | "mcp";
+type ShowcaseMode = "rag" | "graph" | "hybrid" | "mcp";
 
 export function LandingShowcaseClient() {
   const [mode, setMode] = useState<ShowcaseMode>("rag");
@@ -29,7 +29,7 @@ export function LandingShowcaseClient() {
           <span className="w-3 h-3 rounded-full bg-amber-400/80" />
           <span className="w-3 h-3 rounded-full bg-emerald-400/80" />
           <span className="ml-2 text-xs font-mono text-fg-muted">
-            comnois://workspace/production-preview
+            comnois://workspace/v2.0-preview
           </span>
         </div>
 
@@ -45,6 +45,18 @@ export function LandingShowcaseClient() {
           >
             <Sparkles className="w-3.5 h-3.5" />
             Assistente RAG Verificável
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("graph")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              mode === "graph"
+                ? "bg-brand text-white shadow-sm"
+                : "bg-surface text-fg-secondary hover:text-fg border border-border-subtle"
+            }`}
+          >
+            <Network className="w-3.5 h-3.5" />
+            Grafo de Nós & [[WikiLinks]]
           </button>
           <button
             type="button"
@@ -68,7 +80,7 @@ export function LandingShowcaseClient() {
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
-            CLI, MCP & Snapshots Offline
+            CLI, MCP & Vault Markdown
           </button>
         </div>
       </div>
@@ -143,6 +155,72 @@ export function LandingShowcaseClient() {
                 Seção: Grounding & Anti-Alucinação • Score RRF: 0.918
               </div>
             </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Mode 1b: Semantic Knowledge Graph & [[WikiLinks]] */}
+      {mode === "graph" && (
+        <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          <div className="lg:col-span-7 rounded-2xl bg-inset border border-border-subtle p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <Badge variant="brand">
+                <Network className="w-3 h-3" /> Topologia Híbrida: Vetores (65%) + Tags (30%) + [[WikiLinks]]
+              </Badge>
+              <span className="text-xs font-mono text-fg-muted">
+                GET /api/graph
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <Card padding="sm" className="border-brand/40 bg-brand-soft/20 space-y-1">
+                <div className="flex items-center justify-between">
+                  <Badge variant="brand">Hub Central (100%)</Badge>
+                </div>
+                <div className="text-xs font-bold text-fg">
+                  Arquitetura RAG Verificável
+                </div>
+                <div className="text-[11px] text-fg-secondary">
+                  Grau: 6 arestas • 2 Backlinks recebidos
+                </div>
+              </Card>
+
+              <Card padding="sm" className="bg-elevated/60 space-y-1">
+                <div className="flex items-center justify-between">
+                  <Badge variant="purple">[[WikiLink]] 100%</Badge>
+                </div>
+                <div className="text-xs font-bold text-fg">
+                  Síntese: Proteção Anti-SSRF
+                </div>
+                <div className="text-[11px] text-fg-secondary">
+                  Cita [[Arquitetura RAG Verificável]]
+                </div>
+              </Card>
+
+              <Card padding="sm" className="bg-elevated/60 space-y-1">
+                <div className="flex items-center justify-between">
+                  <Badge variant="success">Vetorial 88%</Badge>
+                </div>
+                <div className="text-xs font-bold text-fg">
+                  Busca Híbrida RRF (k=60)
+                </div>
+                <div className="text-[11px] text-fg-secondary">
+                  Tags: #rag, #arquitetura
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-brand-text">
+              Por que &ldquo;Comnois&rdquo; (Com Nós)?
+            </div>
+            <h4 className="text-base font-bold text-fg">
+              Cada documento é um Nó vivo conectado por semântica e referências explícitas
+            </h4>
+            <p className="text-xs text-fg-secondary leading-relaxed">
+              Escreva <code className="px-1.5 py-0.5 rounded bg-elevated font-mono text-brand-text">[[Título do Nó]]</code> em qualquer nota para criar arestas explícitas e backlinks bidirecionais automáticos, ou deixe o motor vetorial calcular o centroide de cada documento e revelar conexões invisíveis.
+            </p>
           </div>
         </div>
       )}
@@ -236,16 +314,22 @@ export function LandingShowcaseClient() {
               → 4 resultados híbridos (RRF) retornados em 14ms
             </div>
             <div>
-              <span className="text-indigo-400">$</span> pnpm cli ask &quot;Quais são os controles LGPD?&quot;
+              <span className="text-indigo-400">$</span> pnpm cli graph
             </div>
             <div className="text-emerald-300 pl-3">
-              ✓ Resposta fundamentada com 3 citações literais verificadas
+              ✓ Grafo Semântico calculado (nós, centralidade, arestas vetoriais e [[WikiLinks]])
+            </div>
+            <div>
+              <span className="text-indigo-400">$</span> pnpm cli export markdown &gt; comnois-vault.md
+            </div>
+            <div className="text-slate-400 pl-3">
+              → Vault Markdown/Obsidian exportado com índice completo de [[WikiLinks]]
             </div>
             <div>
               <span className="text-indigo-400">$</span> pnpm mcp
             </div>
             <div className="text-slate-400 pl-3">
-              → MCP Server ativo para Claude Desktop / Cursor / IDEs (search_knowledge, ask_knowledge, save_knowledge_item)
+              → MCP Server v2.0 ativo (comnois_search, comnois_ask_rag, comnois_knowledge_graph, comnois_related_items)
             </div>
           </div>
 

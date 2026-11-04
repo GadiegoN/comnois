@@ -17,12 +17,13 @@ Plataforma pessoal e colaborativa de gestão de conhecimento para capturar, pres
 - **Observabilidade, Integridade de Backup e Benchmark RAG:** diagnóstico em `/api/health` que verifica latência do banco, saúde da fila e integridade física dos blobs armazenados, mais motor de benchmark quantitativo de Busca (Lexical, Semântica e Híbrida RRF) e precisão de citações RAG.
 - **Fila Persistente e Workers (`processing_jobs`):** estados observáveis (`pending`, `processing`, `retrying`, `succeeded`, `failed`, `cancelled`), retentativas com backoff exponencial, recuperação de tarefas travadas e proteção contra sobrescrita de edições mais recentes (`contentVersion`).
 - **Pesquisa Textual, Semântica, Híbrida (RRF) e Query DSL:** busca lexical, busca vetorial e fusão híbrida via *Reciprocal Rank Fusion* ($k = 60$), linguagem de consulta inline (`is:fav`, `is:archived`, `type:link|note|file|image`, `status:completed|failed`, `site:github.com`, `#tag`, `after:YYYY-MM-DD`, `before:YYYY-MM-DD`) e reconstrução integral do índice a partir dos dados persistidos.
-- **Assistente de Conhecimento (RAG Verificável & Histórico Auditável):** respostas fundamentadas apenas em trechos autorizados da biblioteca, neutralização de *prompt injection*, indicação de divergências entre fontes, validação estrita de citações (`[CIT-1]`, `[CIT-2]`) no servidor e histórico persistente de conversas com política de expurgo/retenção.
-- **Conexões Semânticas ("Nós do Conhecimento") & Snapshots Offline (`.md`):** descoberta automática de documentos relacionados por similaridade de cosseno nos embeddings e sobreposição de tags, mais geração de snapshots arquivísticos Markdown auto-contidos com checksum SHA-256.
-- **Servidor MCP (Model Context Protocol) & CLI Oficial:** integração nativa via JSON-RPC 2.0 (`src/server/mcp.ts` e `pnpm cli mcp`) para conectar o acervo ao Claude Desktop, Cursor ou IDEs, além de CLI completa (`pnpm cli`).
-- **Front-End Modular, Design System Multi-Tema (4 Temas) & Landing Page:** interface decomposta em primitivas reutilizáveis (`src/components/ui/`) e módulos de workspace (`src/components/workspace/`), com 4 temas semânticos (*Alabaster*, *Sépia*, *Obsidian* e *Aurora*) e Landing Page interativa em `/welcome`.
+- **Assistente de Conhecimento (RAG Verificável, Histórico Auditável & Síntese em Nós):** respostas fundamentadas apenas em trechos autorizados da biblioteca, neutralização de *prompt injection*, indicação de divergências entre fontes, validação estrita de citações (`[CIT-1]`, `[CIT-2]`) no servidor, histórico persistente de conversas e botão para transformar qualquer resposta em um **Nó Permanente (`note`)** conectado às fontes via `[[WikiLinks]]`.
+- **Grafo Semântico de Nós (`/api/graph`), `[[WikiLinks]]` Bidirecionais & Snapshots Offline (`.md`):** motor de grafo no servidor combinando similaridade de cosseno vetorial (65%), etiquetas confirmadas (30%), domínio e referências explícitas `[[Título do Nó]]` + *Backlinks* automáticos, além de geração de snapshots arquivísticos Markdown auto-contidos com checksum SHA-256.
+- **Provedores de IA Multi-Motor & OCR Multimodal:** suporte nativo a **Google Gemini** (`gemini-2.5-flash`, `text-embedding-004` e Vision OCR Multimodal), **OpenAI**, **Ollama** e motor **Extrativo Determinístico Local** (zero custo/offline), incluindo extração determinística de chunks `tEXt`/XMP em imagens PNG.
+- **Servidor MCP v2.0 (Model Context Protocol), CLI Oficial & Command Palette (`Ctrl+K`):** integração nativa via JSON-RPC 2.0 (`src/server/mcp.ts` e `pnpm cli mcp`) expondo `comnois_search`, `comnois_ask_rag`, `comnois_knowledge_graph`, `comnois_related_items`, `comnois_add_note` e `comnois_add_link`, CLI completa (`pnpm cli`) e paleta global de comandos por teclado (`Ctrl+K`).
+- **Front-End Modular, Design System Multi-Tema (4 Temas), Leitor Editorial & Landing Page v2.0:** interface decomposta em primitivas reutilizáveis (`src/components/ui/`, incluindo `MarkdownReader.tsx`) e módulos de workspace (`src/components/workspace/`), com 4 temas semânticos (*Alabaster*, *Sépia*, *Obsidian* e *Aurora*) e Landing Page interativa em `/welcome`.
 - **Assinaturas de Feeds RSS 2.0 e Atom:** captura automática de blogs e fontes técnicas com validação anti-SSRF, desduplicação por URL normalizada e aplicação automática de etiquetas e coleções.
-- **Portabilidade Multi-Formato e Prévia Dry-Run:** exportação e importação em formato JSON documentado (`comnois-export-v1`), **Favoritos HTML Netscape** (compatível com Chrome, Firefox, Safari, Edge, Raindrop, Pocket e Karakeep) e **CSV**, além de análise prévia não destrutiva (*Dry-Run Preview*) antes de importar.
+- **Portabilidade Multi-Formato (JSON, Vault Markdown/Obsidian, HTML, CSV) e Prévia Dry-Run:** exportação e reimportação completa em **Vault Markdown/Obsidian (`.md`)** com índice de `[[WikiLinks]]`, JSON (`comnois-export-v1`), **Favoritos HTML Netscape** e **CSV**, com simulação não destrutiva (*Dry-Run Preview*).
 
 ---
 
@@ -86,8 +87,10 @@ Plataforma pessoal e colaborativa de gestão de conhecimento para capturar, pres
    ```bash
    pnpm cli help
    pnpm cli search "is:fav #arquitetura postgres"
-   pnpm cli add-note "Resumo Técnico" "Conteúdo da nota indexado imediatamente"
+   pnpm cli add-note "Resumo Técnico" "Conteúdo da nota com [[WikiLinks]]"
    pnpm cli ask "Quais são os controles contra SSRF documentados?"
+   pnpm cli graph
+   pnpm cli export markdown > comnois-vault.md
    pnpm cli export html > meus-favoritos.html
    pnpm cli health
    ```

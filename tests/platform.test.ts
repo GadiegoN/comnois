@@ -1306,7 +1306,7 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
       method: "initialize",
     });
     expect(mcpInit?.result).toMatchObject({
-      serverInfo: { name: "comnois-knowledge-mcp", version: "1.4.0" },
+      serverInfo: { name: "comnois-knowledge-mcp", version: "2.0.0" },
     });
 
     const mcpTools = await handleMcpJsonRpcRequest(alice.id, {

@@ -38,37 +38,37 @@ const ARCHITECTURAL_PILLARS = [
   {
     icon: <Sparkles className="w-5 h-5 text-brand-text" />,
     badge: "Zero Alucinação",
-    title: "RAG com Citações Literalmente Verificadas",
+    title: "RAG Verificável & Síntese em Nós",
     description:
-      "Cada resposta do assistente exige evidência literal extraída dos seus chunks indexados, detecta contradições entre fontes e neutraliza tentativas de Prompt Injection.",
+      "Cada resposta exige evidência literal dos seus chunks, neutraliza Prompt Injection e pode ser transformada com 1 clique em um Nó Permanente conectado via [[WikiLinks]].",
   },
   {
-    icon: <FolderTree className="w-5 h-5 text-brand-text" />,
-    badge: "Automação Determinística",
-    title: "Coleções Inteligentes, Regras & RSS",
+    icon: <Layers className="w-5 h-5 text-brand-text" />,
+    badge: "Topologia Viva",
+    title: "Grafo de Nós Semântico & [[WikiLinks]]",
     description:
-      "Organize em coleções hierárquicas, Smart Collections dinâmicas baseadas em queries, regras determinísticas de auto-tagging no momento da captura e assinatura de feeds RSS/Atom.",
+      "Visualize seu acervo como uma rede viva: conexões automáticas por similaridade vetorial de cosseno (65%), tags confirmadas (30%) e referências bidirecionais [[WikiLinks]] + Backlinks.",
   },
   {
     icon: <Database className="w-5 h-5 text-brand-text" />,
-    badge: "Content-Addressable Storage",
-    title: "Snapshots Offline & Storage SHA-256",
+    badge: "Zero Lock-in",
+    title: "Vault Markdown/Obsidian & CAS SHA-256",
     description:
-      "Gere snapshots Markdown permanentes de qualquer documento, armazene PDFs e imagens com deduplicação SHA-256 (Local ou S3/R2/MinIO) e audite a integridade física dos blobs.",
+      "Exporte e reimporte sua rede inteira como Vault Markdown (.md) compatível com Obsidian/Logseq, snapshots imutáveis com hash SHA-256 e storage local ou S3/R2/MinIO.",
   },
   {
     icon: <Terminal className="w-5 h-5 text-brand-text" />,
     badge: "Developer-First",
-    title: "Servidor MCP, CLI & Extensão Web",
+    title: "Servidor MCP, CLI, Ctrl+K & Extensão v2.0",
     description:
-      "Conecte seu acervo ao Claude Desktop, Cursor ou IDEs via Model Context Protocol (MCP), opere tudo pelo terminal com `pnpm cli` e capture páginas com a extensão Chrome MV3.",
+      "Conecte seu grafo ao Claude Desktop e Cursor via MCP (`comnois_knowledge_graph`), navegue por teclado com Command Palette (`Ctrl+K`) e capture links ou notas pela extensão Chrome v2.0.",
   },
   {
     icon: <ShieldCheck className="w-5 h-5 text-brand-text" />,
     badge: "Security & LGPD by Design",
-    title: "Anti-SSRF, RBAC, Webhooks HMAC & LGPD",
+    title: "Anti-SSRF, Gemini/OpenAI/Ollama & LGPD",
     description:
-      "Proteção anti-SSRF na captura de links, workspaces colaborativos com RBAC, tokens de API com escopo (`cmn_...`), webhooks assinados via HMAC-SHA256 e exclusão total LGPD.",
+      "Suporte nativo a Google Gemini (com Vision OCR multimodal), OpenAI, Ollama e modo extrativo local, além de RBAC, Webhooks HMAC-SHA256 e exclusão total LGPD.",
   },
 ];
 
@@ -92,16 +92,28 @@ const COMPARISON_ROWS = [
     comnois: "Tags sugeridas com score de confiança + confirmação/rejeição humana",
   },
   {
+    feature: "Grafo de Nós & Conexões",
+    bookmarks: "Pastas estáticas isoladas",
+    karakeep: "Listas e etiquetas simples",
+    comnois: "Grafo Semântico Vetorial + [[WikiLinks]] e Backlinks bidirecionais",
+  },
+  {
     feature: "Integrações & Agentes",
     bookmarks: "Nenhuma",
     karakeep: "API REST + CLI básica",
-    comnois: "MCP Server nativo + CLI completa + Webhooks HMAC + Extensão MV3",
+    comnois: "MCP Server (Busca, RAG e Grafo) + CLI + Webhooks HMAC + Extensão v2.0",
+  },
+  {
+    feature: "Portabilidade & Soberania",
+    bookmarks: "Apenas HTML simples",
+    karakeep: "Exportação JSON",
+    comnois: "Round-Trip Vault Markdown/Obsidian (.md), JSON, HTML, CSV e Snapshots SHA-256",
   },
   {
     feature: "Diagnóstico & Qualidade",
     bookmarks: "Nenhum",
     karakeep: "Status da fila",
-    comnois: "Benchmark quantitativo (Recall@K, MRR, NDCG) + Detector de Drift Vetorial",
+    comnois: "20 suítes E2E + Benchmark quantitativo (Recall@3, MRR) + Drift Vetorial",
   },
 ];
 
@@ -123,10 +135,10 @@ export function LandingPage({
                 <span className="font-bold text-base tracking-tight text-fg">
                   Comnois
                 </span>
-                <Badge variant="brand">v1.5</Badge>
+                <Badge variant="brand">v2.0</Badge>
               </div>
               <p className="text-[11px] text-fg-muted hidden sm:block">
-                Plataforma Inteligente de Conhecimento & RAG Verificável
+                Grafo de Nós Semântico, [[WikiLinks]] & RAG Verificável
               </p>
             </div>
           </div>
@@ -184,7 +196,7 @@ export function LandingPage({
             <div className="max-w-3xl mx-auto text-center space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft border border-brand/30 px-3.5 py-1 text-xs font-medium text-brand-text">
                 <Zap className="w-3.5 h-3.5" />
-                <span>Self-Hosted • Multi-Tema • Busca Híbrida RRF • RAG Verificável</span>
+                <span>Comnois v2.0 • Grafo de Nós • [[WikiLinks]] • Busca Híbrida RRF • RAG Verificável</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-fg leading-[1.12]">
@@ -272,10 +284,10 @@ export function LandingPage({
             </div>
             <div>
               <div className="text-2xl md:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
-                Zero Lock-in
+                Vault .md
               </div>
               <div className="text-xs text-fg-secondary mt-1">
-                Exportação JSON, HTML Bookmarks, CSV e Snapshots .md
+                Round-Trip Obsidian [[WikiLinks]], JSON, HTML e CSV
               </div>
             </div>
           </div>

@@ -176,7 +176,7 @@ export async function handleMcpJsonRpcRequest(
         },
         serverInfo: {
           name: "comnois-knowledge-mcp",
-          version: "1.4.0",
+          version: "2.0.0",
         },
       },
     };
