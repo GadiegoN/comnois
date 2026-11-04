@@ -19,6 +19,7 @@ export interface UserInfo {
 
 export interface SearchItem {
   id: string;
+  workspaceId?: string | null;
   type: "link" | "note" | "file" | "image";
   title: string;
   originalUrl: string | null;
@@ -248,6 +249,15 @@ export interface WorkspacesSettingsData {
     name: string;
     slug?: string;
     role: string;
+    members?: Array<{
+      memberId: string;
+      userId: string | null;
+      displayName: string | null;
+      email: string | null;
+      invitedEmail: string | null;
+      role: string;
+      status: string;
+    }>;
   }>;
   owned?: Array<{ id: string; name: string; slug?: string }>;
   apiTokens?: Array<{
@@ -266,6 +276,15 @@ export interface WorkspacesSettingsData {
     isActive: boolean;
     lastStatus: number | null;
     failureCount: number;
+  }>;
+  webhookDeliveries?: Array<{
+    id: string;
+    webhookId: string;
+    event: string;
+    statusCode: number | null;
+    success: boolean;
+    errorMessage?: string | null;
+    createdAt: string;
   }>;
   rssFeeds?: Array<{
     id: string;

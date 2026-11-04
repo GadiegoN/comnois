@@ -11,6 +11,7 @@ import {
   collectionItems,
   highlights,
   processingJobs,
+  auditLogs,
 } from "@/db/schema";
 import { generateId, sha256Hex } from "@/lib/security/crypto";
 import { normalizeUrlForDeduplication } from "@/lib/security/url-normalizer";
@@ -565,11 +566,23 @@ export async function updateItem(
     isFavorite?: boolean;
     isArchived?: boolean;
     tags?: string[];
+    workspaceId?: string | null;
   }
 ) {
   const existing = await assertItemAccess(userId, itemId);
   const db = await getDb();
   const now = new Date();
+
+  let nextWorkspaceId = existing.workspaceId;
+  if (input.workspaceId !== undefined) {
+    const targetWsId = input.workspaceId ? input.workspaceId.trim() : null;
+    if (targetWsId) {
+      await requireWorkspaceRole(userId, targetWsId, "member");
+    } else if (existing.ownerId !== userId && existing.workspaceId) {
+      await requireWorkspaceRole(userId, existing.workspaceId, "admin");
+    }
+    nextWorkspaceId = targetWsId;
+  }
 
   const contentChanged =
     (input.title !== undefined && input.title.trim() !== existing.title) ||
@@ -589,6 +602,7 @@ export async function updateItem(
         : {}),
       ...(input.isFavorite !== undefined ? { isFavorite: input.isFavorite } : {}),
       ...(input.isArchived !== undefined ? { isArchived: input.isArchived } : {}),
+      ...(input.workspaceId !== undefined ? { workspaceId: nextWorkspaceId } : {}),
       contentVersion: nextVersion,
       metadata: {
         ...existing.metadata,
@@ -597,6 +611,21 @@ export async function updateItem(
       updatedAt: now,
     })
     .where(eq(items.id, itemId));
+
+  if (input.workspaceId !== undefined && nextWorkspaceId !== existing.workspaceId) {
+    await db.insert(auditLogs).values({
+      id: generateId("aud"),
+      actorId: userId,
+      workspaceId: nextWorkspaceId ?? existing.workspaceId ?? null,
+      action: nextWorkspaceId ? "item.workspace_shared" : "item.workspace_unshared",
+      targetType: "item",
+      targetId: itemId,
+      metadata: {
+        previousWorkspaceId: existing.workspaceId,
+        newWorkspaceId: nextWorkspaceId,
+      },
+    });
+  }
 
   if (input.noteText !== undefined) {
     const cleanNote = input.noteText.trim();

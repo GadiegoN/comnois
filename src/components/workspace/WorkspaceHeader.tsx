@@ -105,7 +105,7 @@ export function WorkspaceHeader({
                 <h1 className="text-base font-bold text-fg tracking-tight">
                   Comnois
                 </h1>
-                <Badge variant="brand">Workspace v2.1</Badge>
+                <Badge variant="brand">Workspace v2.2</Badge>
               </div>
               <p className="text-[11px] text-fg-muted hidden sm:block">
                 Pesquisa híbrida RRF & RAG com citações verificáveis

@@ -7,8 +7,10 @@ import {
   inviteWorkspaceMember,
   leaveWorkspace,
   listUserWorkspaces,
+  listWorkspaceMembers,
   removeWorkspaceMember,
   transferWorkspaceOwnership,
+  updateWorkspaceMemberRole,
 } from "@/server/services/workspaces";
 import {
   createApiTokenForUser,
@@ -102,6 +104,24 @@ export async function POST(req: NextRequest) {
         targetUserId: body.targetUserId ?? "",
       });
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "updateMemberRole") {
+      const updated = await updateWorkspaceMemberRole({
+        actorId: user.id,
+        workspaceId: body.workspaceId ?? "",
+        targetUserId: body.targetUserId ?? "",
+        role: body.role === "admin" ? "admin" : "member",
+      });
+      return NextResponse.json({ ok: true, member: updated });
+    }
+
+    if (body.action === "listMembers") {
+      const members = await listWorkspaceMembers(
+        user.id,
+        body.workspaceId ?? ""
+      );
+      return NextResponse.json({ members });
     }
 
     if (body.action === "transferOwnership") {

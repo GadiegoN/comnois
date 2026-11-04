@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Comnois Knowledge — Captura Rápida de Nós",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Salve links, trechos selecionados e notas com [[WikiLinks]] diretamente na sua Plataforma Inteligente de Conhecimento Comnois.",
   "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": ["http://localhost:3000/*", "https://*/*"],

@@ -2,6 +2,7 @@ import {
   searchLibrary,
   findRelatedItems,
   buildKnowledgeGraph,
+  exportKnowledgeGraphAsMermaid,
 } from "@/server/search";
 import { askKnowledgeAssistant } from "@/server/ai/assistant";
 import { createLinkItem, createNoteItem } from "@/server/services/items";
@@ -180,7 +181,7 @@ export async function handleMcpJsonRpcRequest(
         },
         serverInfo: {
           name: "comnois-knowledge-mcp",
-          version: "2.1.0",
+          version: "2.2.0",
         },
       },
     };
@@ -350,6 +351,7 @@ export async function handleMcpJsonRpcRequest(
           minSimilarity,
           workspaceId,
         });
+        const mermaid = exportKnowledgeGraphAsMermaid(graph);
         return {
           jsonrpc: "2.0",
           id,
@@ -357,7 +359,7 @@ export async function handleMcpJsonRpcRequest(
             content: [
               {
                 type: "text",
-                text: JSON.stringify(graph, null, 2),
+                text: JSON.stringify({ ...graph, mermaid }, null, 2),
               },
             ],
           },

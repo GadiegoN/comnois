@@ -29,7 +29,7 @@ export function LandingShowcaseClient() {
           <span className="w-3 h-3 rounded-full bg-amber-400/80" />
           <span className="w-3 h-3 rounded-full bg-emerald-400/80" />
           <span className="ml-2 text-xs font-mono text-fg-muted">
-            comnois://workspace/v2.1-preview
+            comnois://workspace/v2.2-preview
           </span>
         </div>
 

@@ -1450,5 +1450,45 @@ export async function buildKnowledgeGraph(
   };
 }
 
+export function exportKnowledgeGraphAsMermaid(
+  graph: KnowledgeGraphPayload
+): string {
+  const lines: string[] = ["flowchart LR"];
+  if (graph.nodes.length === 0) {
+    lines.push('  empty["Acervo sem nós indexados"]');
+    return lines.join("\n");
+  }
+
+  const safeNodeId = (id: string, idx: number) =>
+    `N${idx + 1}_${id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`;
+
+  const idMap = new Map<string, string>();
+  graph.nodes.forEach((node, idx) => {
+    const mId = safeNodeId(node.id, idx);
+    idMap.set(node.id, mId);
+    const cleanTitle = node.title.replace(/"/g, "'").slice(0, 56);
+    const favPrefix = node.isFavorite ? "★ " : "";
+    lines.push(`  ${mId}["${favPrefix}${cleanTitle} (${node.type})"]`);
+  });
+
+  for (const edge of graph.edges) {
+    const src = idMap.get(edge.source);
+    const tgt = idMap.get(edge.target);
+    if (!src || !tgt) continue;
+    const pct = `${Math.round(edge.similarityScore * 100)}%`;
+    if (edge.isExplicitWikiLink) {
+      lines.push(`  ${src} ==>|"WikiLink (${pct})"| ${tgt}`);
+    } else if (edge.sharedTags.length > 0) {
+      lines.push(
+        `  ${src} -->|"${pct} #${edge.sharedTags[0].replace(/"/g, "")}"| ${tgt}`
+      );
+    } else {
+      lines.push(`  ${src} -->|"${pct}"| ${tgt}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 
 

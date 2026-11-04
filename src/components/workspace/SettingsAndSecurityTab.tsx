@@ -139,11 +139,13 @@ export function SettingsAndSecurityTab({
       name: w.name,
       slug: w.slug || w.id,
       role: "owner",
+      members: [],
     }))
   ).map((w, idx) => ({
     id: w.id || w.workspaceId || `ws-${idx}`,
     name: w.name,
     role: w.role || "owner",
+    members: w.members || [],
   }));
 
   const usedTokens = aiUsage?.totalTokensToday ?? 0;
@@ -399,6 +401,91 @@ export function SettingsAndSecurityTab({
     } catch (err) {
       onFeedback(
         err instanceof Error ? err.message : "Erro ao excluir workspace.",
+        true
+      );
+    }
+  }
+
+  async function handleUpdateMemberRole(
+    workspaceId: string,
+    targetUserId: string,
+    nextRole: "admin" | "member"
+  ) {
+    try {
+      const res = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "updateMemberRole",
+          workspaceId,
+          targetUserId,
+          role: nextRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Erro ao atualizar papel.");
+      }
+      onFeedback(`Papel do membro atualizado para ${nextRole}!`);
+      await onRefreshSettings();
+    } catch (err) {
+      onFeedback(
+        err instanceof Error ? err.message : "Erro ao atualizar papel.",
+        true
+      );
+    }
+  }
+
+  async function handleTransferOwnership(
+    workspaceId: string,
+    newOwnerUserId: string
+  ) {
+    try {
+      const res = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "transferOwnership",
+          workspaceId,
+          newOwnerUserId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error?.message || "Erro ao transferir propriedade."
+        );
+      }
+      onFeedback("Propriedade do workspace transferida com auditoria!");
+      await onRefreshSettings();
+    } catch (err) {
+      onFeedback(
+        err instanceof Error ? err.message : "Erro ao transferir propriedade.",
+        true
+      );
+    }
+  }
+
+  async function handleRemoveMember(workspaceId: string, targetUserId: string) {
+    try {
+      const res = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "removeMember",
+          workspaceId,
+          targetUserId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Erro ao remover membro.");
+      }
+      onFeedback("Membro removido do workspace.");
+      await onRefreshSettings();
+    } catch (err) {
+      onFeedback(
+        err instanceof Error ? err.message : "Erro ao remover membro.",
         true
       );
     }
@@ -702,6 +789,29 @@ export function SettingsAndSecurityTab({
               </div>
             ))}
           </div>
+
+          {(workspacesData?.webhookDeliveries || []).length > 0 && (
+            <div className="space-y-1.5 pt-2 border-t border-border-subtle">
+              <div className="text-[11px] font-semibold text-fg-secondary">
+                Entregas Recentes de Webhook (HMAC-SHA256)
+              </div>
+              <div className="space-y-1 max-h-28 overflow-y-auto">
+                {(workspacesData?.webhookDeliveries || [])
+                  .slice(0, 5)
+                  .map((del) => (
+                    <div
+                      key={del.id}
+                      className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-inset border border-border-subtle text-[11px]"
+                    >
+                      <span className="font-mono text-fg">{del.event}</span>
+                      <Badge variant={del.success ? "success" : "danger"}>
+                        {del.statusCode ?? (del.success ? "200" : "ERR")}
+                      </Badge>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* 4. Collaborative Workspaces & RBAC Invitations */}
@@ -835,6 +945,90 @@ export function SettingsAndSecurityTab({
                   Gerar Token de Convite
                 </Button>
               </form>
+
+              {/* Members of selected workspace */}
+              {(() => {
+                const selectedWs =
+                  workspaceList.find((w) => w.id === inviteWorkspaceId) ||
+                  workspaceList[0];
+                if (!selectedWs || selectedWs.members.length === 0) return null;
+                const canManage =
+                  selectedWs.role === "owner" || selectedWs.role === "admin";
+                return (
+                  <div className="space-y-1.5 pt-2 border-t border-border-subtle">
+                    <div className="text-[11px] font-semibold text-fg-secondary">
+                      Membros de {selectedWs.name} ({selectedWs.members.length})
+                    </div>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {selectedWs.members.map((m) => (
+                        <div
+                          key={m.memberId}
+                          className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-inset border border-border-subtle text-[11px]"
+                        >
+                          <div className="min-w-0 truncate">
+                            <span className="font-medium text-fg">
+                              {m.displayName || m.email || m.invitedEmail}
+                            </span>{" "}
+                            <span className="text-fg-muted">
+                              ({m.role}
+                              {m.status === "invited" ? " • pendente" : ""})
+                            </span>
+                          </div>
+                          {canManage &&
+                            m.userId &&
+                            m.role !== "owner" &&
+                            m.status === "active" && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleUpdateMemberRole(
+                                      selectedWs.id,
+                                      m.userId!,
+                                      m.role === "admin" ? "member" : "admin"
+                                    )
+                                  }
+                                  className="px-1.5 py-0.5 rounded bg-elevated hover:bg-surface text-fg-secondary hover:text-fg border border-border-subtle cursor-pointer"
+                                >
+                                  {m.role === "admin"
+                                    ? "Tornar Member"
+                                    : "Tornar Admin"}
+                                </button>
+                                {selectedWs.role === "owner" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleTransferOwnership(
+                                        selectedWs.id,
+                                        m.userId!
+                                      )
+                                    }
+                                    className="px-1.5 py-0.5 rounded bg-brand-soft text-brand-text hover:opacity-90 cursor-pointer"
+                                  >
+                                    Transferir Owner
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleRemoveMember(
+                                      selectedWs.id,
+                                      m.userId!
+                                    )
+                                  }
+                                  className="text-fg-muted hover:text-red-500 p-0.5 cursor-pointer"
+                                  title="Remover membro"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
 

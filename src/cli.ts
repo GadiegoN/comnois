@@ -13,6 +13,7 @@ import {
 import { createCollection, listUserCollections } from "@/server/services/organization";
 import {
   buildKnowledgeGraph,
+  exportKnowledgeGraphAsMermaid,
   findRelatedItems,
   searchLibrary,
 } from "@/server/search";
@@ -296,7 +297,15 @@ export async function runCliCommand(argv: string[]): Promise<string> {
 
   if (command === "graph") {
     const graph = await buildKnowledgeGraph(userId);
-    return JSON.stringify(graph, null, 2);
+    const fmt = (rest[0] || "").toLowerCase();
+    if (fmt === "mermaid" || fmt === "--mermaid") {
+      return exportKnowledgeGraphAsMermaid(graph);
+    }
+    return JSON.stringify(
+      { ...graph, mermaid: exportKnowledgeGraphAsMermaid(graph) },
+      null,
+      2
+    );
   }
 
   if (command === "health") {

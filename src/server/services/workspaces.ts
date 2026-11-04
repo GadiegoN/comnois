@@ -1,6 +1,7 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  users,
   workspaces,
   workspaceMembers,
   auditLogs,
@@ -259,6 +260,108 @@ export async function transferWorkspaceOwnership(input: {
   });
 }
 
+export interface WorkspaceMemberSummary {
+  memberId: string;
+  userId: string | null;
+  displayName: string | null;
+  email: string | null;
+  invitedEmail: string | null;
+  role: WorkspaceRole;
+  status: "invited" | "active" | "revoked" | "expired";
+}
+
+export async function listWorkspaceMembers(
+  actorId: string,
+  workspaceId: string
+): Promise<WorkspaceMemberSummary[]> {
+  await requireWorkspaceRole(actorId, workspaceId, "member");
+  const db = await getDb();
+
+  const rows = await db
+    .select({
+      memberId: workspaceMembers.id,
+      userId: workspaceMembers.userId,
+      displayName: users.displayName,
+      email: users.email,
+      invitedEmail: workspaceMembers.invitedEmail,
+      role: workspaceMembers.role,
+      status: workspaceMembers.status,
+    })
+    .from(workspaceMembers)
+    .leftJoin(users, eq(workspaceMembers.userId, users.id))
+    .where(eq(workspaceMembers.workspaceId, workspaceId));
+
+  return rows.filter((r) => r.status === "active" || r.status === "invited");
+}
+
+export async function updateWorkspaceMemberRole(input: {
+  actorId: string;
+  workspaceId: string;
+  targetUserId: string;
+  role: "admin" | "member";
+}): Promise<{ userId: string; role: WorkspaceRole }> {
+  const actorRole = await requireWorkspaceRole(
+    input.actorId,
+    input.workspaceId,
+    "admin"
+  );
+  const db = await getDb();
+
+  const [ws] = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, input.workspaceId))
+    .limit(1);
+
+  if (!ws) {
+    throw new NotFoundError("Workspace não encontrado.");
+  }
+
+  if (ws.ownerId === input.targetUserId) {
+    throw new ValidationError(
+      "O papel do proprietário só pode ser alterado mediante transferência de propriedade."
+    );
+  }
+
+  const targetRole = await getMemberRoleInWorkspace(
+    input.targetUserId,
+    input.workspaceId
+  );
+  if (!targetRole) {
+    throw new NotFoundError("Membro ativo não encontrado neste workspace.");
+  }
+
+  if (actorRole !== "owner" && targetRole === "admin") {
+    throw new ForbiddenError(
+      "Apenas o proprietário do workspace pode alterar o papel de outro administrador."
+    );
+  }
+
+  const now = new Date();
+  await db
+    .update(workspaceMembers)
+    .set({ role: input.role, updatedAt: now })
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, input.workspaceId),
+        eq(workspaceMembers.userId, input.targetUserId),
+        eq(workspaceMembers.status, "active")
+      )
+    );
+
+  await db.insert(auditLogs).values({
+    id: generateId("aud"),
+    actorId: input.actorId,
+    workspaceId: input.workspaceId,
+    action: "workspace.member_role_updated",
+    targetType: "workspace_member",
+    targetId: input.targetUserId,
+    metadata: { previousRole: targetRole, newRole: input.role },
+  });
+
+  return { userId: input.targetUserId, role: input.role };
+}
+
 export async function listUserWorkspaces(userId: string) {
   const db = await getDb();
   const memberships = await db
@@ -276,7 +379,42 @@ export async function listUserWorkspaces(userId: string) {
       and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.status, "active"))
     );
 
-  return memberships;
+  if (memberships.length === 0) return [];
+
+  const wsIds = memberships.map((m) => m.id);
+  const allMembersRows = await db
+    .select({
+      memberId: workspaceMembers.id,
+      workspaceId: workspaceMembers.workspaceId,
+      userId: workspaceMembers.userId,
+      displayName: users.displayName,
+      email: users.email,
+      invitedEmail: workspaceMembers.invitedEmail,
+      role: workspaceMembers.role,
+      status: workspaceMembers.status,
+    })
+    .from(workspaceMembers)
+    .leftJoin(users, eq(workspaceMembers.userId, users.id))
+    .where(inArray(workspaceMembers.workspaceId, wsIds));
+
+  return memberships.map((ws) => ({
+    ...ws,
+    members: allMembersRows
+      .filter(
+        (m) =>
+          m.workspaceId === ws.id &&
+          (m.status === "active" || m.status === "invited")
+      )
+      .map((m) => ({
+        memberId: m.memberId,
+        userId: m.userId,
+        displayName: m.displayName,
+        email: m.email,
+        invitedEmail: m.invitedEmail,
+        role: m.role,
+        status: m.status,
+      })),
+  }));
 }
 
 /**

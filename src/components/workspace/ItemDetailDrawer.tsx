@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Plus,
   Trash2,
+  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +26,7 @@ import type { ItemDetailData } from "@/types/platform";
 
 interface ItemDetailDrawerProps {
   item: ItemDetailData | null;
+  workspaces?: Array<{ id: string; name: string; role: string }>;
   onClose: () => void;
   onOpenOtherItem: (id: string) => void;
   onReloadItem: (id: string) => Promise<void>;
@@ -34,6 +36,7 @@ interface ItemDetailDrawerProps {
 
 export function ItemDetailDrawer({
   item: detail,
+  workspaces = [],
   onClose,
   onOpenOtherItem,
   onReloadItem,
@@ -202,13 +205,45 @@ export function ItemDetailDrawer({
     }
   }
 
+  async function handleShareWorkspaceChange(targetWsId: string) {
+    try {
+      const res = await fetch(`/api/items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: targetWsId || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error?.message || "Erro ao alterar escopo de compartilhamento."
+        );
+      }
+      onFeedback(
+        targetWsId
+          ? "Item compartilhado no Workspace Colaborativo!"
+          : "Item retornado exclusivamente ao seu Acervo Pessoal."
+      );
+      await onReloadItem(itemId);
+      await onRefreshLibrary();
+    } catch (err) {
+      onFeedback(
+        err instanceof Error
+          ? err.message
+          : "Erro ao alterar compartilhamento do item.",
+        true
+      );
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs">
       <div className="w-full max-w-3xl bg-surface border-l border-border-subtle h-full overflow-y-auto p-6 space-y-6 shadow-2xl">
         {/* Top Drawer Bar */}
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-border-subtle">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="brand">{coreItem.type.toUpperCase()}</Badge>
               <Badge
                 variant={
@@ -224,6 +259,26 @@ export function ItemDetailDrawer({
               <span className="text-xs text-fg-muted">
                 Salvo em {new Date(coreItem.createdAt).toLocaleString("pt-BR")}
               </span>
+              {workspaces.length > 0 && (
+                <div className="inline-flex items-center gap-1.5 rounded-lg bg-inset border border-border-subtle px-2 py-0.5 text-[11px]">
+                  <Users className="w-3 h-3 text-brand-text" />
+                  <select
+                    aria-label="Compartilhar item com workspace"
+                    value={coreItem.workspaceId || ""}
+                    onChange={(e) =>
+                      void handleShareWorkspaceChange(e.target.value)
+                    }
+                    className="bg-transparent text-[11px] font-medium text-fg focus:outline-none cursor-pointer"
+                  >
+                    <option value="">Escopo: Acervo Pessoal</option>
+                    {workspaces.map((ws) => (
+                      <option key={ws.id} value={ws.id}>
+                        Compartilhado: {ws.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <h2 className="text-lg font-bold text-fg leading-snug">
               {coreItem.title}

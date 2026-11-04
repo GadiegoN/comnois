@@ -715,6 +715,7 @@ export default function PlatformWorkspaceClient({
       {/* Slide-over Item Reader & Editor Drawer */}
       <ItemDetailDrawer
         item={selectedItemDetail}
+        workspaces={workspaceOptions}
         onClose={() => setSelectedItemDetail(null)}
         onOpenOtherItem={openItemDetail}
         onReloadItem={openItemDetail}

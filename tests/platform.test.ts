@@ -19,6 +19,8 @@ import {
   acceptWorkspaceInvite,
   removeWorkspaceMember,
   transferWorkspaceOwnership,
+  listWorkspaceMembers,
+  updateWorkspaceMemberRole,
   leaveWorkspace,
   deleteWorkspace,
   requireWorkspaceRole,
@@ -53,6 +55,7 @@ import {
   reindexUserLibrary,
   findRelatedItems,
   buildKnowledgeGraph,
+  exportKnowledgeGraphAsMermaid,
   extractWikiLinks,
   resolveNodeLinksAndBacklinks,
   getEmbeddingIndexDiagnostics,
@@ -1309,7 +1312,7 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
       method: "initialize",
     });
     expect(mcpInit?.result).toMatchObject({
-      serverInfo: { name: "comnois-knowledge-mcp", version: "2.1.0" },
+      serverInfo: { name: "comnois-knowledge-mcp", version: "2.2.0" },
     });
 
     const mcpTools = await handleMcpJsonRpcRequest(alice.id, {
@@ -1818,6 +1821,108 @@ describe("Plataforma Inteligente de Conhecimento — Suíte Completa de Testes",
     });
     expect(ownerPersonalSearch.total).toBeGreaterThanOrEqual(1);
     expect(ownerPersonalSearch.results[0].id).toBe(ownerWsNote.item.id);
+  });
+
+  // ==========================================================================
+  // 22. GESTÃO COMPLETA DE EQUIPE RBAC, COMPARTILHAMENTO EXPLÍCITO DE ITENS E GRAFO MERMAID
+  // ==========================================================================
+  it("lista membros, altera papéis RBAC, compartilha itens explicitamente entre acervo pessoal e workspace e exporta o Grafo em Mermaid (flowchart LR)", async () => {
+    const { user: owner } = await registerUser({
+      email: "team-owner-v22@example.com",
+      displayName: "Team Owner",
+      password: "Password123",
+    });
+    const { user: teammate } = await registerUser({
+      email: "team-member-v22@example.com",
+      displayName: "Team Member",
+      password: "Password123",
+    });
+
+    const ws = await createWorkspace({
+      ownerId: owner.id,
+      name: "Engenharia de Conhecimento v2.2",
+    });
+
+    const invite = await inviteWorkspaceMember({
+      actorId: owner.id,
+      workspaceId: ws.id,
+      invitedEmail: teammate.email,
+      role: "member",
+    });
+
+    await acceptWorkspaceInvite({
+      userId: teammate.id,
+      inviteToken: invite.inviteToken,
+    });
+
+    // 1. List members & promote member -> admin -> member
+    const membersBefore = await listWorkspaceMembers(owner.id, ws.id);
+    expect(membersBefore).toHaveLength(2);
+
+    const promoted = await updateWorkspaceMemberRole({
+      actorId: owner.id,
+      workspaceId: ws.id,
+      targetUserId: teammate.id,
+      role: "admin",
+    });
+    expect(promoted.role).toBe("admin");
+    expect(await requireWorkspaceRole(teammate.id, ws.id, "admin")).toBe("admin");
+
+    // Cannot alter owner's role via updateWorkspaceMemberRole
+    await expect(
+      updateWorkspaceMemberRole({
+        actorId: teammate.id,
+        workspaceId: ws.id,
+        targetUserId: owner.id,
+        role: "member",
+      })
+    ).rejects.toThrow(/transferência de propriedade/i);
+
+    // 2. Explicit Item Sharing between Personal Library and Collaborative Workspace (`updateItem` with `workspaceId`)
+    const personalNote = await createNoteItem(owner.id, {
+      title: "RFC de Governança de Dados",
+      content: "Conectado a [[Guia de Topologia Mermaid]] na equipe.",
+      tags: ["governanca", "mermaid"],
+    });
+
+    await createNoteItem(teammate.id, {
+      title: "Guia de Topologia Mermaid",
+      content: "Especificação de diagramas flowchart LR do grafo semântico.",
+      tags: ["governanca", "mermaid"],
+      workspaceId: ws.id,
+    });
+
+    // Initially personalNote is not in the collaborative workspace
+    const wsSearchBefore = await searchLibrary({
+      ownerId: teammate.id,
+      workspaceId: ws.id,
+      query: "RFC",
+    });
+    expect(wsSearchBefore.total).toBe(0);
+
+    // Owner explicitly shares personalNote with the collaborative workspace
+    await updateItem(owner.id, personalNote.item.id, {
+      workspaceId: ws.id,
+    });
+
+    const wsSearchAfter = await searchLibrary({
+      ownerId: teammate.id,
+      workspaceId: ws.id,
+      query: "RFC",
+    });
+    expect(wsSearchAfter.total).toBe(1);
+    expect(wsSearchAfter.results[0].id).toBe(personalNote.item.id);
+
+    // 3. Export Knowledge Graph Topology as Mermaid (`flowchart LR`)
+    const wsGraph = await buildKnowledgeGraph(teammate.id, {
+      workspaceId: ws.id,
+      minSimilarity: 0.2,
+    });
+    const mermaidDiagram = exportKnowledgeGraphAsMermaid(wsGraph);
+    expect(mermaidDiagram).toContain("flowchart LR");
+    expect(mermaidDiagram).toContain("RFC de Governança de Dados");
+    expect(mermaidDiagram).toContain("Guia de Topologia Mermaid");
+    expect(mermaidDiagram).toContain('==>|"WikiLink (100%)"|');
   });
 });
 

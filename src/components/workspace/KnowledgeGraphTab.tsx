@@ -56,6 +56,7 @@ export function KnowledgeGraphTab({
   const [serverGraph, setServerGraph] = useState<{
     nodes: Array<Omit<GraphNode, "x" | "y">>;
     edges: GraphEdge[];
+    mermaid?: string;
     stats: {
       totalNodes: number;
       totalEdges: number;
@@ -64,6 +65,7 @@ export function KnowledgeGraphTab({
     };
   } | null>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
+  const [showMermaidPreview, setShowMermaidPreview] = useState(false);
 
   const fetchServerGraph = useCallback(async () => {
     setLoadingGraph(true);
@@ -219,6 +221,15 @@ export function KnowledgeGraphTab({
             <Badge variant="brand">{nodes.length} Nós</Badge>
             <Badge variant="purple">{edges.length} Conexões Semânticas</Badge>
             <Badge variant="default">Grau médio: {avgDegree}</Badge>
+            {serverGraph?.mermaid && (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => setShowMermaidPreview((prev) => !prev)}
+              >
+                {showMermaidPreview ? "Ocultar Mermaid" : "Diagrama Mermaid (.mmd)"}
+              </Button>
+            )}
             <Button
               size="xs"
               variant="secondary"
@@ -230,6 +241,40 @@ export function KnowledgeGraphTab({
             </Button>
           </div>
         </div>
+
+        {showMermaidPreview && serverGraph?.mermaid && (
+          <div className="p-3.5 rounded-2xl bg-inset border border-border-subtle space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-brand-text">
+                Topologia Exportável em Mermaid (`flowchart LR`)
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(serverGraph.mermaid || "");
+                  }}
+                >
+                  Copiar Mermaid
+                </Button>
+                <a
+                  href={`/api/graph?maxNodes=45&minSimilarity=${minSimilarity}${
+                    activeWorkspaceId
+                      ? `&workspaceId=${encodeURIComponent(activeWorkspaceId)}`
+                      : ""
+                  }&format=mermaid`}
+                  className="inline-flex items-center gap-1 rounded-xl bg-brand text-white px-2.5 py-1 text-xs font-semibold hover:bg-brand-hover transition"
+                >
+                  Baixar .mmd
+                </a>
+              </div>
+            </div>
+            <pre className="text-[11px] font-mono text-fg bg-surface p-3 rounded-xl border border-border-subtle overflow-x-auto max-h-48">
+              {serverGraph.mermaid}
+            </pre>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-border-subtle">
           <div className="relative flex-1">

@@ -113,7 +113,7 @@ const COMPARISON_ROWS = [
     feature: "Diagnóstico & Qualidade",
     bookmarks: "Nenhum",
     karakeep: "Status da fila",
-    comnois: "21 suítes E2E + Benchmark quantitativo (Recall@3, MRR) + Drift Vetorial",
+    comnois: "22 suítes E2E + Benchmark quantitativo (Recall@3, MRR) + Drift Vetorial",
   },
 ];
 
@@ -135,10 +135,10 @@ export function LandingPage({
                 <span className="font-bold text-base tracking-tight text-fg">
                   Comnois
                 </span>
-                <Badge variant="brand">v2.1</Badge>
+                <Badge variant="brand">v2.2</Badge>
               </div>
               <p className="text-[11px] text-fg-muted hidden sm:block">
-                Workspaces Colaborativos, Grafo Semântico, [[WikiLinks]] & RAG Verificável
+                Workspaces Colaborativos, Grafo Mermaid, [[WikiLinks]] & RAG Verificável
               </p>
             </div>
           </div>
@@ -196,7 +196,7 @@ export function LandingPage({
             <div className="max-w-3xl mx-auto text-center space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft border border-brand/30 px-3.5 py-1 text-xs font-medium text-brand-text">
                 <Zap className="w-3.5 h-3.5" />
-                <span>Comnois v2.1 • Workspaces Colaborativos • Grafo de Nós • [[WikiLinks]] • RAG Verificável</span>
+                <span>Comnois v2.2 • Equipes RBAC • Grafo Mermaid (.mmd) • [[WikiLinks]] • RAG Verificável</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-fg leading-[1.12]">
